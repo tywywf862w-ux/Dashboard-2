@@ -7,7 +7,7 @@
 
 <!-- PWA: manifest + theme color -->
 <link rel="manifest" href="./manifest.json" />
-<meta name="theme-color" content="#1c1c1a" />
+<meta name="theme-color" content="#ffffff" />
 
 <!-- iOS-specific PWA tags (Safari does not read manifest.json for these) -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,32 +15,353 @@
 <meta name="apple-mobile-web-app-title" content="MBBS Dashboard" />
 <link rel="apple-touch-icon" href="./icon-192.png" />
 
+<script>
+  // Applied before first paint to avoid a flash of the default background,
+  // and to decide immediately whether the app-lock PIN screen is needed
+  // before any dashboard content becomes visible.
+  (function () {
+    try {
+      var saved = localStorage.getItem("rounds_bg_color_v1");
+      if (saved) {
+        // The saved color is the HEADER's base tone — the page body is
+        // always derived to be LIGHTER than it (mixed toward white), so
+        // the top of the page reads as the deeper tone and the canvas
+        // below stays lighter, whatever color was picked. A small
+        // self-contained copy of the same logic the main script uses
+        // later, so both are correctly set from the very first paint.
+        document.documentElement.style.setProperty("--bg-page-header", saved);
+
+        var m = saved.replace("#", "");
+        var r = parseInt(m.substring(0, 2), 16);
+        var g = parseInt(m.substring(2, 4), 16);
+        var b = parseInt(m.substring(4, 6), 16);
+        var toHex = function (n) { return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0"); };
+        var amount = 0.72;
+        var pageHex = "#" + toHex(r + (255 - r) * amount) + toHex(g + (255 - g) * amount) + toHex(b + (255 - b) * amount);
+        document.documentElement.style.setProperty("--bg-page", pageHex);
+      }
+    } catch (e) {
+      // localStorage unavailable — default background applies as normal.
+    }
+
+    try {
+      var pinHash = localStorage.getItem("rounds_applock_hash_v1");
+      if (pinHash) {
+        document.documentElement.setAttribute("data-locked", "true");
+      }
+    } catch (e) {
+      // localStorage unavailable — app opens unlocked as normal.
+    }
+  })();
+</script>
+
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
 
   * { box-sizing: border-box; }
 
+  /* ---------- App lock screen ---------- */
+
+  .lock-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: var(--bg-page, #f4f5f7);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .lock-overlay.visible {
+    display: flex;
+  }
+
+  /* When a PIN is set, the early inline script marks <html> with
+     data-locked before first paint — this hides the header/main content
+     immediately so there's no flash of the dashboard before the lock
+     screen's own JS has a chance to run and show itself. The lock
+     overlay markup itself is exempt so it can still render on top. */
+  html[data-locked="true"] header,
+  html[data-locked="true"] main {
+    display: none;
+  }
+
+  .lock-panel {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+  }
+
+  .lock-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-strong, #eaeef0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 2px rgba(20,37,29,0.06), 0 4px 12px rgba(20,37,29,0.06);
+  }
+
+  .lock-icon svg {
+    width: 22px;
+    height: 22px;
+    stroke: var(--accent-green, #1f7a4d);
+  }
+
+  .lock-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 20px;
+    color: var(--text-primary, #14251d);
+  }
+
+  .lock-sub {
+    font-size: 12px;
+    color: var(--text-secondary, #6b7570);
+    margin-bottom: 18px;
+  }
+
+  .lock-dots {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+    height: 14px;
+    align-items: center;
+  }
+
+  .lock-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong, #eaeef0);
+    background: transparent;
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .lock-dot.filled {
+    background: var(--accent-green, #1f7a4d);
+    border-color: var(--accent-green, #1f7a4d);
+    transform: scale(1.1);
+  }
+
+  .lock-overlay.shake .lock-dots {
+    animation: lock-shake 0.4s ease;
+  }
+
+  @keyframes lock-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+  }
+
+  .lock-error {
+    font-size: 12px;
+    color: #c4485c;
+    min-height: 16px;
+    margin-bottom: 8px;
+  }
+
+  .lock-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 8px 0 20px;
+  }
+
+  .lock-key {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-strong, #eaeef0);
+    color: var(--text-primary, #14251d);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(20,37,29,0.05);
+    transition: background 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .lock-key:hover {
+    background: var(--bg-hover, #eef1f0);
+  }
+
+  .lock-key:active {
+    transform: scale(0.94);
+  }
+
+  .lock-key-back {
+    font-size: 18px;
+    color: var(--text-secondary, #6b7570);
+  }
+
+  .lock-forgot-note {
+    color: var(--text-secondary, #6b7570);
+    font-size: 11px;
+    line-height: 1.5;
+    max-width: 260px;
+    margin: 4px 0 0;
+  }
+
+  /* ---------- App lock settings sub-panel ---------- */
+
+  .applock-popover {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .applock-popover.visible {
+    display: flex;
+  }
+
+  .applock-desc {
+    font-size: 12px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .applock-note {
+    font-size: 10.5px;
+    line-height: 1.5;
+    opacity: 0.6;
+    margin: 0;
+  }
+
+  .applock-action-btn {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    background: var(--text-primary, #14251d);
+    color: var(--bg-page, #f4f5f7);
+    transition: filter 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .applock-action-btn:hover {
+    filter: brightness(1.15);
+    transform: translateY(-1px);
+  }
+
+  .applock-action-btn:active {
+    transform: translateY(1px);
+  }
+
+  .applock-remove-btn {
+    background: rgba(139,46,63,0.1);
+    color: #8b2e3f;
+  }
+
+  /* ---------- Global checkbox material treatment ---------- */
+  /* Applies a carved, embossed look to every checkbox in the app so they
+     match the tile/button material language instead of showing the plain
+     native OS checkbox. Per-context rules below (sizing, accent-color)
+     still layer on top of this for their specific placements. */
+  input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    background: linear-gradient(155deg, #fdfcf8 0%, var(--bg-subtle, #f4f5f7) 100%);
+    border: 1px solid rgba(28,28,26,0.35);
+    border-radius: 4px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.7) inset,
+      0 1px 2px rgba(28,28,26,0.18) inset;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  input[type="checkbox"]:hover {
+    border-color: rgba(28,28,26,0.55);
+  }
+
+  input[type="checkbox"]:active {
+    transform: scale(0.92);
+  }
+
+  input[type="checkbox"]:checked {
+    background: linear-gradient(155deg, #3a7a5a 0%, #2d6a4f 55%, #1f5138 100%);
+    border-color: #1a4530;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -1px 2px rgba(0,0,0,0.3) inset,
+      0 1px 2px rgba(28,28,26,0.25);
+  }
+
+  input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 28%;
+    top: 12%;
+    width: 28%;
+    height: 52%;
+    border: solid var(--bg-page, #f4f5f7);
+    border-width: 0 2px 2px 0;
+    transform: rotate(40deg);
+  }
+
   body {
     margin: 0;
     min-height: 100vh;
-    background: #f6f3ec;
+    background: var(--bg-page, #f4f5f7);
     font-family: 'IBM Plex Mono', 'Courier New', monospace;
-    color: #1c1c1a;
+    color: var(--text-primary, #14251d);
+    transition: background-color 0.35s ease, color 0.35s ease;
   }
 
   header {
-    border-bottom: 2px solid #1c1c1a;
-    padding: 24px 24px 18px;
-    background: #f6f3ec;
+    margin: 12px 16px 0;
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 20px;
+    padding: 16px 20px 14px;
+    padding-top: calc(16px + env(safe-area-inset-top));
+    background:
+      linear-gradient(155deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.12) 22%, rgba(0,0,0,0.06) 48%, rgba(0,0,0,0.02) 62%, rgba(255,255,255,0.22) 78%, rgba(255,255,255,0.05) 100%),
+      var(--bg-page-header, var(--bg-page, #f4f5f7));
     position: sticky;
-    top: 0;
+    top: 12px;
     z-index: 20;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -6px 10px rgba(20,30,35,0.08) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 6px 18px rgba(30,40,45,0.18);
+    transition: background-color 0.35s ease;
+  }
+
+  /* Glossy highlight sweep across the top of the header, matching the
+     same metallic sheen used on the tiles, date-strip, and timer widget —
+     so the header itself now reads as its own floating widget/panel
+     (rounded, bordered, elevated) rather than a flat full-width bar. */
+  header::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 55%;
+    border-radius: 20px 20px 60% 60% / 20px 20px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+    z-index: 0;
   }
 
   .header-inner {
     max-width: 1100px;
     margin: 0 auto;
     position: relative;
+    z-index: 1;
   }
 
   .owner-name-badge {
@@ -70,8 +391,8 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: #1c1c1a;
-    color: #f6f3ec;
+    background: var(--text-primary, #14251d);
+    color: var(--bg-page, #f4f5f7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -99,25 +420,28 @@
   h1 {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(24px, 4vw, 36px);
+    font-size: clamp(20px, 3.4vw, 30px);
     letter-spacing: -0.01em;
     margin: 0;
     cursor: pointer;
-    color: #1c1c1a;
-    text-shadow:
-      0 1px 0 rgba(255,255,255,0.9),
-      0 2px 0 rgba(255,255,255,0.5),
-      0 4px 6px rgba(28,28,26,0.3),
-      0 1px 1px rgba(28,28,26,0.18);
+    color: var(--text-primary, #14251d);
   }
 
-  h1 .dot { color: #8b2e3f; }
+  h1 .dot { color: var(--accent-green, #1f7a4d); }
 
   .eyebrow {
-    font-size: 12px;
+    font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     opacity: 0.65;
+    margin-top: 3px;
+  }
+
+  .creator-credit {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    opacity: 0.75;
+    margin-left: 4px;
   }
 
   .inline-edit-btn {
@@ -129,11 +453,16 @@
     padding: 2px 4px;
     vertical-align: middle;
     color: inherit;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .inline-edit-btn:hover {
     opacity: 0.85;
+    transform: scale(1.15);
+  }
+
+  .inline-edit-btn:active {
+    transform: scale(0.95);
   }
 
   h1 .inline-edit-btn {
@@ -147,13 +476,13 @@
   }
 
   .editable-text[contenteditable="true"] {
-    background: #fffdf8;
-    box-shadow: 0 0 0 1.5px #1c1c1a;
+    background: var(--bg-surface, #ffffff);
+    box-shadow: 0 0 0 1.5px var(--text-primary, #14251d);
     cursor: text;
   }
 
   .eyebrow .editable-text[contenteditable="true"] {
-    box-shadow: 0 0 0 1.5px #1c1c1a55;
+    box-shadow: 0 0 0 1.5px var(--text-primary, #14251d)55;
   }
 
   .subtitle {
@@ -163,54 +492,90 @@
     max-width: 600px;
   }
 
+  .subtitle:empty {
+    margin: 0;
+    height: 0;
+  }
+
   .timer-widget {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 10px;
     width: 25%;
     min-width: 280px;
-    margin: 0 0 16px;
-    background: linear-gradient(160deg, #2a2a2c 0%, #1c1c1e 60%, #131314 100%);
-    border: 1px solid #3a3a3c;
-    border-radius: 6px;
-    padding: 14px 18px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.06) inset;
+    margin: 0 0 10px;
+    background: linear-gradient(155deg, #2d9663 0%, #1f7a4d 22%, #14532e 55%, #1a6640 78%, #238a58 100%);
+    border: 1px solid #0f3d22;
+    border-radius: 16px;
+    padding: 10px 14px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -6px 10px rgba(0,0,0,0.25) inset,
+      0 3px 0 #0f3d22,
+      0 6px 16px rgba(20,83,46,0.35);
+  }
+
+  /* Glossy highlight overlay, matching the same metallic treatment as
+     the subject tiles and date-strip, so the timer reads as the same
+     tactile material rather than a flat accent card. */
+  .timer-widget::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 45%;
+    border-radius: 18px 18px 60% 60% / 18px 18px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+  }
+
+  .timer-widget::after {
+    display: none;
   }
 
   .timer-left {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 4px 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35) inset;
+    position: relative;
+    z-index: 1;
   }
 
   .timer-label {
-    font-size: 10px;
-    letter-spacing: 0.08em;
+    font-size: 8px;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #9a9a9c;
+    color: rgba(255,255,255,0.7);
   }
 
   .timer-display {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: clamp(18px, 3.2vw, 26px);
-    font-weight: 600;
-    color: #f4f4f2;
-    letter-spacing: 0.02em;
+    font-size: clamp(16px, 2.8vw, 22px);
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.01em;
     font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.25);
   }
 
   .timer-display.timer-running {
-    color: #6fd08c;
+    color: #baf5c8;
   }
 
   .timer-display.timer-warning {
-    color: #e8b04e;
+    color: #ffd9a8;
   }
 
   .timer-display.timer-done {
-    color: #e8697a;
+    color: #ffb3bc;
   }
 
   .timer-controls {
@@ -218,37 +583,55 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
   }
 
   .timer-btn {
-    background: #2f2f31;
-    color: #f4f4f2;
-    border: 1px solid #48484a;
-    border-radius: 4px;
-    padding: 7px 11px;
+    background: linear-gradient(155deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.1) 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 8px;
+    padding: 5px 9px;
     font: inherit;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.12s ease, transform 0.1s ease;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.2) inset,
+      0 -2px 4px rgba(0,0,0,0.15) inset,
+      0 2px 4px rgba(0,0,0,0.2);
+    transition: background 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.1s ease;
   }
 
-  .timer-btn:hover { background: #3a3a3c; }
-  .timer-btn:active { transform: translateY(1px); }
+  .timer-btn:hover {
+    background: linear-gradient(155deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.16) 100%);
+    transform: translateY(-1px);
+  }
+  .timer-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25) inset;
+  }
 
   .timer-btn-primary {
-    background: #4a7a5c;
-    border-color: #5c9070;
+    background: linear-gradient(155deg, #ffffff 0%, #f0f1f3 45%, #dfe1e4 100%);
+    color: var(--accent-green-dark, #14532e);
+    border-color: #ffffff;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.9) inset,
+      0 -2px 4px rgba(20,30,35,0.08) inset,
+      0 2px 4px rgba(0,0,0,0.2);
   }
 
-  .timer-btn-primary:hover { background: #558a68; }
+  .timer-btn-primary:hover { background: linear-gradient(155deg, #ffffff 0%, #eef0f1 45%, #dadcdf 100%); }
 
   .timer-btn-primary.is-running {
-    background: #8b3e46;
-    border-color: #a3505a;
+    background: linear-gradient(155deg, #ffffff 0%, #f0f1f3 45%, #dfe1e4 100%);
+    color: #b23a4a;
+    border-color: #ffffff;
   }
 
-  .timer-btn-primary.is-running:hover { background: #9c4750; }
+  .timer-btn-primary.is-running:hover { background: linear-gradient(155deg, #ffffff 0%, #fceef0 45%, #f7d9dd 100%); }
 
   .timer-btn-icon {
     padding: 9px 12px;
@@ -262,12 +645,13 @@
     gap: 14px;
     align-items: center;
     justify-content: space-between;
-    background: #f2ede0;
-    border: 1.5px solid #1c1c1a;
-    border-radius: 6px;
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-strong, #eaeef0);
+    border-radius: 16px;
     padding: 12px 16px;
     margin-bottom: 16px;
     font-size: 13px;
+    box-shadow: 0 1px 2px rgba(20,37,29,0.04), 0 4px 14px rgba(20,37,29,0.05);
   }
 
   .timer-settings-panel.visible {
@@ -286,6 +670,11 @@
     align-items: center;
     gap: 6px;
     cursor: pointer;
+    transition: opacity 0.12s ease;
+  }
+
+  .timer-settings-option:hover {
+    opacity: 0.75;
   }
 
   .timer-settings-option input {
@@ -302,17 +691,22 @@
     width: 46px;
     font: inherit;
     font-size: 13px;
-    border: 1px solid #1c1c1a55;
-    border-radius: 3px;
+    border: 1px solid var(--text-primary, #14251d)55;
+    border-radius: 4px;
     padding: 4px 5px;
     text-align: center;
-    background: #fffdf8;
+    background: var(--bg-surface, #ffffff);
     color: inherit;
+    box-shadow: 0 1px 2px rgba(28,28,26,0.06) inset;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .timer-dur-input:focus {
     outline: none;
-    border-color: #1c1c1a;
+    border-color: var(--text-primary, #14251d);
+    box-shadow:
+      0 1px 3px rgba(28,28,26,0.15) inset,
+      0 1px 0 rgba(255,255,255,0.6);
   }
 
   @media (max-width: 560px) {
@@ -323,74 +717,491 @@
 
   .date-strip {
     display: flex;
-    align-items: center;
-    gap: 18px;
-    flex-wrap: wrap;
-    margin-top: 14px;
-    padding: 12px 16px;
-    background: #fffdf8;
-    border: 1.5px solid #1c1c1a;
-    border-radius: 4px;
+    flex-direction: column;
+    gap: 7px;
+    width: 25%;
+    min-width: 280px;
+    margin: 0;
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 16px;
+    padding: 9px 12px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -5px 8px rgba(20,30,35,0.06) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 4px 12px rgba(30,40,45,0.14);
   }
 
-  .date-block {
+  /* Glossy highlight overlay, matching the same metallic treatment as
+     the subject tiles and timer widget, so the date-strip reads as the
+     same material even though its own content needs more vertical room
+     than the timer's single-row layout. */
+  .date-strip::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 40%;
+    border-radius: 18px 18px 60% 60% / 18px 18px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+  }
+
+  .date-strip::after {
+    display: none;
+  }
+
+  .scan-sweep {
+    display: none;
+  }
+
+  /* ---------- Week-strip header: "Sat, 16 2025 ... JUL" ---------- */
+
+  .week-strip-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .week-strip-date {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .week-strip-dow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--tile-text-soft, #3d4750);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .week-strip-year {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--tile-text, #1a2229);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .week-strip-month {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 0.02em;
+    color: var(--accent-green, #1f7a4d);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+    white-space: nowrap;
+  }
+
+  /* ---------- Week-strip row: 7 day cells, today highlighted ---------- */
+
+  .week-strip-row {
+    display: flex;
+    gap: 3px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .week-strip-cell {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 3px 2px;
+    border-radius: 7px;
+    background: none;
+    border: none;
+    font: inherit;
+    cursor: default;
+  }
+
+  .week-strip-cell-dow {
+    font-size: 7.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--tile-text-soft, #3d4750);
+  }
+
+  .week-strip-cell-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--tile-text, #1a2229);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Today's cell gets its own small raised metallic pill, tinted green,
+     so it stands out from the rest of the week the same way the
+     reference design highlights the current day. */
+  .week-strip-cell.is-today {
+    cursor: pointer;
+    background: linear-gradient(155deg, #2d9663 0%, #1f7a4d 45%, #14532e 100%);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.3) inset,
+      0 -2px 4px rgba(0,0,0,0.2) inset,
+      0 1px 0 #0f3d22,
+      0 2px 5px rgba(20,83,46,0.35);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+  }
+
+  .week-strip-cell.is-today:hover {
+    transform: translateY(-1px);
+  }
+
+  .week-strip-cell.is-today:active {
+    transform: translateY(1px);
+  }
+
+  .week-strip-cell.is-today .week-strip-cell-dow {
+    color: rgba(255,255,255,0.75);
+  }
+
+  .week-strip-cell.is-today .week-strip-cell-num {
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  }
+
+  /* ---------- Exam date / Days remaining row ---------- */
+
+  .date-strip-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+  }
+
+  .date-strip-stat {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    flex: 1 1 0;
+    min-width: 0;
+    background: rgba(20,30,35,0.05);
+    border: 1px solid rgba(20,30,35,0.08);
+    border-radius: 7px;
+    padding: 4px 7px;
   }
 
-  .date-label {
-    font-size: 10px;
-    letter-spacing: 0.06em;
+  .date-strip-label {
+    font-size: 8px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    opacity: 0.55;
+    color: var(--tile-text-soft, #3d4750);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .date-value {
-    font-size: 14px;
-    font-weight: 600;
+  .date-strip-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--tile-text, #1a2229);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
+  .exam-date-display-wrap {
+    position: relative;
+    min-width: 0;
+  }
+
+  .exam-date-display-text {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary, #14251d);
+    padding: 1px 4px;
+    border: 1px solid var(--border-strong, #eaeef0);
+    background: var(--bg-surface, #ffffff);
+    border-radius: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .exam-date-display-wrap:hover .exam-date-display-text {
+    border-color: var(--accent-green, #1f7a4d);
+  }
+
+  .exam-date-display-wrap:has(.exam-date-input:focus) .exam-date-display-text {
+    border-color: var(--accent-green, #1f7a4d);
+    box-shadow: 0 0 0 2px var(--accent-green-soft, #e6f4ec);
+  }
+
+  /* The real date input sits invisibly on top of our own styled text, at
+     the exact same position and size — tapping anywhere opens the native
+     iOS date picker as normal, but nothing of the native control's own
+     text rendering (which iOS lays out unpredictably and can't be
+     reliably constrained with width/box-sizing alone) is ever shown. */
   .exam-date-input {
-    font: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    border: 1px solid transparent;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    opacity: 0;
+    border: none;
     background: transparent;
-    color: inherit;
-    padding: 2px 4px;
-    border-radius: 3px;
+    color-scheme: light;
+    cursor: pointer;
   }
 
-  .exam-date-input:hover { border-color: #1c1c1a33; }
-  .exam-date-input:focus {
-    outline: none;
-    border-color: #1c1c1a;
-    background: #fff;
+  #countdown-display {
+    color: var(--accent-green, #1f7a4d);
   }
 
-  .countdown-block .date-value {
-    color: #8b2e3f;
+  /* ---------- Mobile: tighter single-row spacing, plus tighter header
+     spacing overall ---------- */
+  @media (max-width: 480px) {
+    .date-strip {
+      width: 100%;
+      min-width: 0;
+      gap: 6px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+
+    .week-strip-year {
+      font-size: 13px;
+    }
+
+    .week-strip-month {
+      font-size: 14px;
+    }
+
+    .week-strip-cell-dow {
+      font-size: 6.5px;
+    }
+
+    .week-strip-cell-num {
+      font-size: 10px;
+    }
+
+    .date-strip-label {
+      font-size: 7px;
+    }
+
+    .date-strip-value {
+      font-size: 11px;
+    }
+
+    .exam-date-display-text {
+      font-size: 10px;
+      padding: 1px 3px;
+    }
+
+    header {
+      margin: 8px 10px 0;
+      padding: 12px 14px 8px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      top: 8px;
+    }
+
+    .title-row {
+      gap: 4px;
+    }
+
+    .eyebrow {
+      margin-top: 2px;
+      font-size: 10px;
+    }
+
+    /* Tighter overall page rhythm on phones — less dead space between
+       the header and content, and between subject groups. */
+    main {
+      padding: 16px 14px 48px;
+    }
+
+    section.group {
+      margin-bottom: 24px;
+    }
+
+    .group-header {
+      margin-bottom: 10px;
+    }
+
+    .group-header h2 {
+      font-size: 17px;
+    }
+
+    /* More compact subject/overview tiles so more fit per screen while
+       keeping the ring a safe tap target (Apple's 44px minimum). */
+    .grid {
+      gap: 10px;
+    }
+
+    .tile {
+      padding: 10px 12px 9px;
+      gap: 10px;
+    }
+
+    .ring-wrap {
+      width: 46px;
+      height: 46px;
+      min-width: 46px;
+    }
+
+    .tile-name {
+      font-size: 14px;
+    }
+
+    .tile-hint,
+    .tile-progress-label {
+      font-size: 10px;
+    }
   }
 
   .date-sep {
-    width: 1px;
-    align-self: stretch;
-    background: #1c1c1a22;
+    display: none;
   }
 
-  .timer-toggle-strip {
+  /* ---------- Radial hub menu (replaces the flat icon row) ---------- */
+
+  .hub-toggle-strip {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  /* Scoped wrapper now that the hub row lives inside the header card
+     (alongside the title and widgets) instead of as its own full-width
+     row in main — gives it a bit of top spacing from the date-strip
+     above it, and keeps it comfortably inside the card's own padding on
+     narrow iPhone widths rather than crowding the rounded corner. */
+  .header-hub-row {
     margin-top: 10px;
+    padding-right: 2px;
   }
 
-  .toggle-strip-group {
+  .hub-wrap {
+    position: relative;
+    width: 34px;
+    height: 34px;
+  }
+
+  .hub-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    background: linear-gradient(155deg, var(--tile-c1, #fbfbfc) 0%, var(--tile-c2, #f0f1f3) 30%, var(--tile-c3, #e2e4e7) 60%, var(--tile-c6, #f6f7f8) 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    cursor: pointer;
+    position: relative;
+    z-index: 3;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -3px 6px var(--tile-shadow-inset, rgba(20,30,35,0.06)) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 3px 6px var(--tile-shadow, rgba(30,40,45,0.14));
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .hub-btn:hover {
+    transform: scale(1.06) translateY(-1px);
+    filter: brightness(1.04);
+  }
+
+  .hub-btn:active {
+    transform: scale(0.94) translateY(1px);
+    filter: brightness(0.97);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 -2px 4px var(--tile-shadow-inset-active, rgba(20,30,35,0.09)) inset,
+      0 1px 0 var(--tile-edge, #b3b8bf),
+      0 1px 3px var(--tile-shadow-active, rgba(30,40,45,0.12));
+  }
+
+  .hub-btn svg {
+    position: absolute;
+    width: 17px;
+    height: 17px;
+    color: var(--tile-text, #1a2229);
+    stroke: var(--tile-text, #1a2229);
+    transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .hub-icon-close {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.5);
+  }
+
+  .hub-wrap[data-open="true"] .hub-btn {
+    background: linear-gradient(155deg, var(--accent-green, #1f7a4d) 0%, var(--accent-green-dark, #14532e) 100%);
+    border-color: var(--accent-green-dark, #14532e);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -3px 6px rgba(0,0,0,0.2) inset,
+      0 2px 0 var(--accent-green-dark, #14532e),
+      0 3px 6px rgba(20,83,46,0.35);
+  }
+
+  .hub-wrap[data-open="true"] .hub-icon-dots {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.5);
+  }
+
+  .hub-wrap[data-open="true"] .hub-icon-close {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    color: #ffffff;
+    stroke: #ffffff;
+  }
+
+  /* Each satellite sits at the hub's own position by default (collapsed,
+     invisible, unclickable) and is translated out along a fan arc when
+     the hub opens — via inline --sx/--sy custom properties set in JS
+     from each icon's actual angle, so the arc works the same regardless
+     of how many satellites exist. */
+  .hub-satellite {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 34px;
+    height: 34px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(0, 0) scale(0.5);
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s ease;
+    z-index: 2;
+  }
+
+  .hub-wrap[data-open="true"] .hub-satellite {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(var(--sx, 0px), var(--sy, 0px)) scale(1);
+  }
+
+  /* Staggered pop-out so satellites don't all move in lockstep — a small
+     per-index delay read from data-hub-index via JS-set inline style. */
+
+  @media (prefers-reduced-motion: reduce) {
+    .hub-btn,
+    .hub-btn svg,
+    .hub-satellite {
+      transition: none !important;
+    }
   }
 
   .timer-toggle-btn {
@@ -399,90 +1210,110 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(155deg, #f4f4f2 0%, #dcdcda 30%, #b8b9bb 60%, #e8e8e7 100%);
-    border: 1px solid #8a8b8d;
+    background: linear-gradient(155deg, var(--tile-c1, #fbfbfc) 0%, var(--tile-c2, #f0f1f3) 30%, var(--tile-c3, #e2e4e7) 60%, var(--tile-c6, #f6f7f8) 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
     border-radius: 50%;
     cursor: pointer;
+    position: relative;
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.7) inset,
-      0 -3px 6px rgba(0,0,0,0.15) inset,
-      0 2px 5px rgba(0,0,0,0.25);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -3px 6px var(--tile-shadow-inset, rgba(20,30,35,0.06)) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 3px 6px var(--tile-shadow, rgba(30,40,45,0.14));
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, filter 0.15s ease;
   }
 
   .timer-toggle-btn:hover {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    filter: brightness(1.03);
   }
 
   .timer-toggle-btn:active {
     transform: translateY(1px);
+    filter: brightness(0.97);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 -2px 4px var(--tile-shadow-inset-active, rgba(20,30,35,0.09)) inset,
+      0 1px 0 var(--tile-edge, #b3b8bf),
+      0 1px 3px var(--tile-shadow-active, rgba(30,40,45,0.12));
   }
 
   .timer-toggle-btn svg {
-    width: 17px;
-    height: 17px;
-    stroke: #3a3a3c;
+    width: 32px;
+    height: 32px;
+    stroke: var(--tile-text, #1a2229);
   }
 
   .timer-toggle-btn[aria-pressed="true"] {
-    background: linear-gradient(155deg, #2a2a2c 0%, #1c1c1e 60%, #131314 100%);
-    border-color: #3a3a3c;
+    background: linear-gradient(155deg, var(--accent-green, #1f7a4d) 0%, var(--accent-green-dark, #14532e) 100%);
+    border-color: var(--accent-green-dark, #14532e);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -3px 6px rgba(0,0,0,0.2) inset,
+      0 2px 0 var(--accent-green-dark, #14532e),
+      0 3px 6px rgba(20,83,46,0.35);
   }
 
   .timer-toggle-btn[aria-pressed="true"] svg {
-    stroke: #6fd08c;
+    stroke: #ffffff;
   }
 
-  /* ---------- Revision shortcut icons — visually distinct from the timer toggle ---------- */
+  /* ---------- Revision shortcut icons — each a metallic tint of its own
+     accent color, matching the same tactile depth as the subject tiles ---------- */
 
   .shortcut-icon-btn {
     width: 34px;
     height: 34px;
-    border-radius: 9px;
+    border-radius: 50%;
     position: relative;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.7) inset,
+      0 -3px 6px rgba(20,30,35,0.12) inset,
+      0 2px 0 rgba(0,0,0,0.15),
+      0 3px 6px rgba(30,40,45,0.16);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s ease, box-shadow 0.15s ease;
   }
 
   .shortcut-icon-btn#open-revision-due-icon-btn {
-    background: linear-gradient(155deg, #f8ecc9 0%, #f0dda0 45%, #d8b869 100%);
-    border: 1px solid #9c6b1f;
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.6) inset,
-      0 -3px 6px rgba(122,90,18,0.25) inset,
-      0 2px 5px rgba(122,90,18,0.3);
+    background: linear-gradient(155deg, #fff4e0 0%, #f8ecc9 30%, #e8d19c 62%, #f5e6c0 100%);
+    border: 1px solid #d9b96e;
   }
 
   .shortcut-icon-btn#open-revision-due-icon-btn svg {
-    stroke: #7a5a12;
+    stroke: #8a5f1e;
   }
 
   .shortcut-icon-btn#open-revision-backlog-icon-btn {
-    background: linear-gradient(155deg, #f4d6db 0%, #e8b3bc 45%, #c9707f 100%);
-    border: 1px solid #8b2e3f;
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.6) inset,
-      0 -3px 6px rgba(139,46,63,0.25) inset,
-      0 2px 5px rgba(139,46,63,0.3);
+    background: linear-gradient(155deg, #fde9ec 0%, #f7d3d9 30%, #ecb2bd 62%, #f6dbe0 100%);
+    border: 1px solid #dd97a4;
   }
 
   .shortcut-icon-btn#open-revision-backlog-icon-btn svg {
-    stroke: #6e2333;
+    stroke: #a8384a;
   }
 
   .shortcut-icon-btn.backup-icon-btn {
-    background: linear-gradient(155deg, #dfeaf4 0%, #b7cfe4 45%, #7fa3c2 100%);
-    border: 1px solid #4a6c8a;
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.6) inset,
-      0 -3px 6px rgba(30,58,84,0.25) inset,
-      0 2px 5px rgba(30,58,84,0.3);
+    background: linear-gradient(155deg, #e8f0fb 0%, #cfe0f4 30%, #a9c6e6 62%, #dbe9f7 100%);
+    border: 1px solid #8fb3dc;
   }
 
   .shortcut-icon-btn.backup-icon-btn svg {
-    stroke: #29435c;
+    stroke: #2d5a8a;
   }
 
   .shortcut-icon-btn:hover {
-    filter: brightness(1.05);
+    transform: translateY(-2px);
+    filter: brightness(1.04);
+  }
+
+  .shortcut-icon-btn:active {
+    transform: translateY(1px);
+    filter: brightness(0.96);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.4) inset,
+      0 -2px 4px rgba(20,30,35,0.15) inset,
+      0 1px 0 rgba(0,0,0,0.15),
+      0 1px 3px rgba(30,40,45,0.14);
   }
 
   .shortcut-badge {
@@ -493,15 +1324,15 @@
     height: 16px;
     padding: 0 4px;
     border-radius: 8px;
-    background: #1c1c1a;
-    color: #f6f3ec;
+    background: var(--accent-green, #1f7a4d);
+    color: #ffffff;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 10px;
     font-weight: 700;
     display: none;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    box-shadow: 0 1px 2px rgba(20,37,29,0.2);
   }
 
   .shortcut-badge.visible {
@@ -532,10 +1363,11 @@
     position: absolute;
     top: calc(100% + 10px);
     right: 0;
-    background: #ffffff;
-    border-radius: 16px;
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-strong, #eaeef0);
+    border-radius: 18px;
     padding: 14px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12);
+    box-shadow: 0 4px 12px rgba(20,37,29,0.08), 0 16px 36px rgba(20,37,29,0.1);
     z-index: 50;
     width: 220px;
   }
@@ -558,12 +1390,19 @@
     border: none;
     cursor: pointer;
     position: relative;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-    transition: transform 0.12s ease;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 -2px 4px rgba(0,0,0,0.15) inset,
+      0 2px 4px rgba(0,0,0,0.25);
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease;
   }
 
   .color-swatch-option:hover {
-    transform: scale(1.08);
+    transform: scale(1.08) translateY(-1px);
+  }
+
+  .color-swatch-option:active {
+    transform: scale(1.02) translateY(0);
   }
 
   .color-swatch-option.selected::after {
@@ -620,6 +1459,167 @@
     stroke: #d6c8f0;
   }
 
+  /* ---------- Background color picker ---------- */
+
+  .bg-color-btn {
+    position: relative;
+  }
+
+  .bg-swatch-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.7);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+    background: var(--bg-page, #f4f5f7);
+  }
+
+  /* ---------- Settings menu (icon + colors + profile + backup) ---------- */
+
+  .settings-icon-btn {
+    background: linear-gradient(155deg, #f4f5f7 0%, #e2e5e8 30%, #c9cdd2 62%, #ecedef 100%);
+    border: 1px solid #aeb4bb;
+  }
+
+  .settings-icon-btn svg {
+    stroke: #4a5158;
+  }
+
+  .settings-menu-icon {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+  }
+
+  .settings-menu-icon svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+  }
+
+  .backup-popover {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .backup-popover.visible {
+    display: flex;
+  }
+
+  .backup-sync-status {
+    font-size: 10px;
+    opacity: 0.55;
+    margin: 0 0 4px;
+    padding: 0 8px;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .backup-sync-status.synced {
+    color: #23663c;
+    opacity: 0.85;
+  }
+
+  .sync-provenance-status {
+    font-size: 10px;
+    opacity: 0.6;
+    margin: 0 0 4px;
+    padding: 0 8px;
+    line-height: 1.4;
+    word-break: break-word;
+    color: #3d5a80;
+  }
+
+  .sync-provenance-status:empty {
+    display: none;
+  }
+
+  .device-name-note {
+    font-size: 9.5px;
+    opacity: 0.45;
+    margin: 0 0 4px;
+    padding: 0 8px;
+    line-height: 1.4;
+    font-style: italic;
+  }
+
+  .backup-divider {
+    height: 1px;
+    background: rgba(28,28,26,0.1);
+    margin: 4px 0 6px;
+  }
+
+  .color-menu-popover {
+    width: 200px;
+    padding: 8px;
+  }
+
+  .color-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .color-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 8px;
+    font: inherit;
+    font-size: 13px;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .color-menu-item:hover {
+    background: var(--bg-hover, #eef1f0);
+    transform: translateX(2px);
+  }
+
+  .color-menu-item:active {
+    transform: translateX(2px) scale(0.98);
+  }
+
+  .color-menu-item .color-swatch-dot,
+  .color-menu-item .bg-swatch-dot {
+    width: 20px;
+    height: 20px;
+  }
+
+  .color-submenu-back {
+    display: block;
+    background: transparent;
+    border: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 0 0 10px;
+    transition: opacity 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .color-submenu-back:hover {
+    opacity: 1;
+    transform: translateX(-2px);
+  }
+
+  .color-submenu-back:active {
+    transform: translateX(-2px) scale(0.96);
+  }
+
   .profile-popover {
     width: 240px;
     flex-direction: column;
@@ -646,16 +1646,21 @@
   .profile-field input {
     font: inherit;
     font-size: 13px;
-    border: 1px solid #1c1c1a33;
+    border: 1px solid var(--text-primary, #14251d)33;
     border-radius: 4px;
     padding: 6px 8px;
     color: inherit;
-    background: #fffdf8;
+    background: var(--bg-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(28,28,26,0.06) inset;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .profile-field input:focus {
     outline: none;
-    border-color: #1c1c1a;
+    border-color: var(--text-primary, #14251d);
+    box-shadow:
+      0 1px 3px rgba(28,28,26,0.15) inset,
+      0 1px 0 rgba(255,255,255,0.6);
   }
 
   .profile-note {
@@ -689,17 +1694,28 @@
   .breadcrumb.visible { display: flex; }
 
   .breadcrumb .back-btn {
-    background: #1c1c1a;
-    color: #f6f3ec;
-    border: none;
-    border-radius: 4px;
+    background: var(--accent-green, #1f7a4d);
+    color: var(--bg-page, #f4f5f7);
+    border: 1px solid var(--accent-green, #1f7a4d);
+    border-radius: 5px;
     padding: 5px 10px;
     font: inherit;
     font-size: 12px;
     cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(31,122,77,0.25);
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, filter 0.12s ease;
   }
 
-  .breadcrumb .back-btn:hover { opacity: 0.85; }
+  .breadcrumb .back-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+  }
+
+  .breadcrumb .back-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(31,122,77,0.3);
+  }
 
   main {
     max-width: 1100px;
@@ -720,8 +1736,211 @@
   .group-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .group-edit-btn {
+    font-size: 11px;
+  }
+
+  /* ---------- "+ Add section" popover (header toolbar icon) ---------- */
+
+  .add-section-popover {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    width: 220px;
+  }
+
+  .add-section-popover.visible {
+    display: flex;
+  }
+
+  .add-section-popover-label {
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+
+  .add-section-input {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid rgba(28,28,26,0.3);
+    border-radius: 4px;
+    padding: 8px 10px;
+    background: var(--bg-surface, #ffffff);
+    color: var(--text-primary, #14251d);
+  }
+
+  .add-section-input:focus {
+    outline: none;
+    border-color: var(--text-primary, #14251d);
+  }
+
+  .add-section-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .add-section-confirm,
+  .add-section-cancel {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    border-radius: 5px;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: filter 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .add-section-confirm {
+    background: var(--text-primary, #14251d);
+    color: var(--bg-page, #f4f5f7);
+  }
+
+  .add-section-cancel {
+    background: rgba(28,28,26,0.08);
+    color: var(--text-primary, #14251d);
+  }
+
+  .add-section-confirm:hover,
+  .add-section-cancel:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .add-section-confirm:active,
+  .add-section-cancel:active {
+    transform: translateY(1px);
+  }
+
+  .add-section-divider {
+    height: 1px;
+    background: rgba(28,28,26,0.1);
+    margin: 4px 0;
+  }
+
+  .remove-section-block {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .remove-section-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  .remove-section-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: rgba(28,28,26,0.04);
+    border-radius: 5px;
+    padding: 6px 8px;
+  }
+
+  .remove-section-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary, #14251d);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .remove-section-btn {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(139,46,63,0.1);
+    color: #8b2e3f;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .remove-section-btn:hover {
+    background: rgba(139,46,63,0.2);
+    transform: scale(1.1);
+  }
+
+  .remove-section-btn:active {
+    transform: scale(0.9);
+  }
+
+  .section-confirm-remove {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    background: linear-gradient(165deg, rgba(255,255,255,0.95) 0%, rgba(251,250,247,0.9) 100%);
+    border: 1px solid rgba(139,46,63,0.3);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 4px;
+  }
+
+  .section-confirm-remove.visible {
+    display: flex;
+  }
+
+  .section-confirm-text {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-primary, #14251d);
+    margin: 0;
+  }
+
+  .section-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .section-confirm-cancel,
+  .section-confirm-delete {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: filter 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .section-confirm-cancel {
+    background: rgba(28,28,26,0.08);
+    color: var(--text-primary, #14251d);
+  }
+
+  .section-confirm-delete {
+    background: #8b2e3f;
+    color: #fdf3f0;
+  }
+
+  .section-confirm-cancel:hover,
+  .section-confirm-delete:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .section-confirm-cancel:active,
+  .section-confirm-delete:active {
+    transform: translateY(1px);
   }
 
   .dot-marker {
@@ -736,7 +1955,7 @@
     font-weight: 600;
     font-size: 20px;
     margin: 0;
-    color: #1c1c1a;
+    color: var(--text-primary, #14251d);
     text-shadow:
       0 1px 0 rgba(255,255,255,0.9),
       0 2px 0 rgba(255,255,255,0.5),
@@ -749,14 +1968,14 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     opacity: 0.5;
-    border: 1px solid #1c1c1a33;
+    border: 1px solid var(--text-primary, #14251d)33;
     border-radius: 3px;
     padding: 2px 6px;
   }
 
   .rule {
     flex: 1;
-    border-bottom: 1px dashed #1c1c1a33;
+    border-bottom: 1px dashed var(--text-primary, #14251d)33;
   }
 
   .grid {
@@ -765,31 +1984,59 @@
     gap: 14px;
   }
 
-  :root {
-    --tile-c1: #f4f4f2;
-    --tile-c2: #dcdcda;
-    --tile-c3: #b8b9bb;
-    --tile-c4: #96979a;
-    --tile-c5: #c2c3c5;
-    --tile-c6: #e8e8e7;
-    --tile-border: #8a8b8d;
-    --tile-edge: #6f7072;
-    --tile-shadow: rgba(0,0,0,0.35);
-    --tile-shadow-hover: rgba(0,0,0,0.4);
-    --tile-shadow-inset: rgba(0,0,0,0.18);
-    --tile-shadow-inset-hover: rgba(0,0,0,0.16);
-    --tile-shadow-inset-active: rgba(0,0,0,0.22);
-    --tile-shadow-active: rgba(0,0,0,0.3);
-    --tile-text: #1a1a1b;
-    --tile-text-soft: #2c2c2d;
-    --tile-outline: #1c1c1a;
+  /* Registering --bg-page as a typed <color> custom property is what
+     actually lets the browser interpolate it smoothly. Without this,
+     changing a custom property is treated as a discrete value swap even
+     when a `transition: background` rule is present on the element that
+     consumes it — so the fade would silently never happen. */
+  @property --bg-page {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: var(--bg-page, #f4f5f7);
   }
+
+  :root {
+    --tile-c1: #fbfbfc;
+    --tile-c2: #f0f1f3;
+    --tile-c3: #e2e4e7;
+    --tile-c4: #d3d6da;
+    --tile-c5: #e6e8eb;
+    --tile-c6: #f6f7f8;
+    --tile-border: #c7cbd1;
+    --tile-edge: #b3b8bf;
+    --tile-shadow: rgba(30,40,45,0.14);
+    --tile-shadow-hover: rgba(30,40,45,0.18);
+    --tile-shadow-inset: rgba(20,30,35,0.06);
+    --tile-shadow-inset-hover: rgba(20,30,35,0.05);
+    --tile-shadow-inset-active: rgba(20,30,35,0.09);
+    --tile-shadow-active: rgba(30,40,45,0.12);
+    --tile-text: #1a2229;
+    --tile-text-soft: #3d4750;
+    --tile-outline: #b3b8bf;
+
+    --accent-green: #1f7a4d;
+    --accent-green-dark: #14532e;
+    --accent-green-soft: #e6f4ec;
+    --accent-green-softer: #f2faf6;
+
+    --bg-page: #f4f5f7;
+    --bg-surface: #ffffff;
+    --bg-subtle: #f4f5f7;
+    --bg-hover: #eef1f0;
+    --text-primary: #14251d;
+    --text-primary-rgb: 20, 37, 29;
+    --text-secondary: #6b7570;
+    --border-strong: #eaeef0;
+    --border-soft: rgba(20,37,29,0.08);
+    --border-faint: rgba(20,37,29,0.05);
+  }
+
 
   .tile {
     text-align: left;
     background: linear-gradient(155deg, var(--tile-c1) 0%, var(--tile-c2) 22%, var(--tile-c3) 48%, var(--tile-c4) 62%, var(--tile-c5) 78%, var(--tile-c6) 100%);
     border: 1px solid var(--tile-border);
-    border-radius: 6px;
+    border-radius: 16px;
     padding: 14px 16px 12px;
     display: flex;
     flex-direction: row;
@@ -798,14 +2045,30 @@
     font: inherit;
     color: var(--tile-text);
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, filter 0.15s ease;
     width: 100%;
     position: relative;
+    z-index: 1;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.75) inset,
-      0 -6px 10px var(--tile-shadow-inset) inset,
-      0 3px 0 var(--tile-edge),
-      0 6px 12px var(--tile-shadow);
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -5px 8px var(--tile-shadow-inset) inset,
+      0 2px 0 var(--tile-edge),
+      0 4px 12px var(--tile-shadow);
+  }
+
+  /* Once a tile name is being edited, its text needs to be selectable
+     again so document.execCommand("selectAll") and normal typing work. */
+  .tile-name[contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  .tile.menu-open {
+    z-index: 40;
   }
 
   .tile::before {
@@ -813,27 +2076,27 @@
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 40%;
-    border-radius: 6px 6px 60% 60% / 6px 6px 100% 100%;
-    background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%);
+    border-radius: 16px 16px 60% 60% / 16px 16px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%);
     pointer-events: none;
   }
 
   .tile:hover, .tile:focus-visible {
     transform: translateY(-3px);
-    filter: brightness(1.04);
+    filter: brightness(1.03);
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.8) inset,
-      0 -6px 10px var(--tile-shadow-inset-hover) inset,
-      0 3px 0 var(--tile-edge),
-      0 10px 18px var(--tile-shadow-hover);
+      0 1px 0 rgba(255,255,255,0.85) inset,
+      0 -5px 8px var(--tile-shadow-inset-hover) inset,
+      0 2px 0 var(--tile-edge),
+      0 8px 18px var(--tile-shadow-hover);
   }
 
   .tile:active {
     transform: translateY(1px);
-    filter: brightness(0.97);
+    filter: brightness(0.98);
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.5) inset,
-      0 -4px 8px var(--tile-shadow-inset-active) inset,
+      0 1px 0 rgba(255,255,255,0.6) inset,
+      0 -3px 6px var(--tile-shadow-inset-active) inset,
       0 1px 0 var(--tile-edge),
       0 2px 4px var(--tile-shadow-active);
   }
@@ -866,6 +2129,138 @@
     gap: 4px;
     min-width: 0;
     flex: 1;
+  }
+
+  /* ---------- Long-press context menu on subject tiles ---------- */
+
+  .tile-context-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 12px;
+    background: linear-gradient(165deg, rgba(255,255,255,0.85) 0%, rgba(251,250,247,0.75) 100%);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 10px;
+    padding: 6px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.7) inset,
+      0 10px 24px rgba(28,28,26,0.22),
+      0 2px 8px rgba(28,28,26,0.14);
+    z-index: 30;
+    min-width: 140px;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tile-context-menu.visible {
+    display: flex;
+  }
+
+  .tile-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #14251d);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background 0.12s ease;
+  }
+
+  .tile-context-item:hover {
+    background: rgba(28,28,26,0.08);
+  }
+
+  .tile-context-item span {
+    font-size: 13px;
+    width: 16px;
+    text-align: center;
+  }
+
+  .tile-context-remove {
+    color: #8b2e3f;
+  }
+
+  /* ---------- Remove-confirmation panel on subject tiles ---------- */
+
+  .tile-confirm-remove {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 12px;
+    right: 12px;
+    background: linear-gradient(165deg, rgba(255,255,255,0.92) 0%, rgba(251,250,247,0.85) 100%);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(139,46,63,0.3);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.7) inset,
+      0 10px 24px rgba(28,28,26,0.22),
+      0 2px 8px rgba(28,28,26,0.14);
+    z-index: 30;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tile-confirm-remove.visible {
+    display: flex;
+  }
+
+  .tile-confirm-text {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-primary, #14251d);
+    margin: 0;
+  }
+
+  .tile-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .tile-confirm-cancel,
+  .tile-confirm-delete {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: filter 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .tile-confirm-cancel {
+    background: rgba(28,28,26,0.08);
+    color: var(--text-primary, #14251d);
+  }
+
+  .tile-confirm-delete {
+    background: #8b2e3f;
+    color: #fdf3f0;
+  }
+
+  .tile-confirm-cancel:hover,
+  .tile-confirm-delete:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .tile-confirm-cancel:active,
+  .tile-confirm-delete:active {
+    transform: translateY(1px);
   }
 
   .tile-name {
@@ -909,6 +2304,153 @@
     font-size: 11px;
     opacity: 0.75;
     color: var(--tile-text-soft);
+  }
+
+  /* ---------- "+" add-subject tile ---------- */
+
+  .add-subject-tile {
+    background: repeating-linear-gradient(
+      135deg,
+      rgba(28,28,26,0.03) 0px, rgba(28,28,26,0.03) 10px,
+      transparent 10px, transparent 20px
+    ), var(--bg-surface, #ffffff);
+    border: 1.5px dashed rgba(28,28,26,0.3);
+    box-shadow: none;
+    justify-content: center;
+    min-height: 68px;
+  }
+
+  .add-subject-tile::before {
+    display: none;
+  }
+
+  .add-subject-tile:hover {
+    border-color: rgba(20,37,29,0.4);
+    background: repeating-linear-gradient(
+      135deg,
+      rgba(20,37,29,0.04) 0px, rgba(20,37,29,0.04) 10px,
+      transparent 10px, transparent 20px
+    ), var(--bg-hover, #eef1f0);
+    transform: translateY(-2px);
+  }
+
+  .add-subject-idle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    width: 100%;
+    color: var(--text-primary, #14251d);
+    opacity: 0.65;
+  }
+
+  .add-subject-tile.adding .add-subject-idle {
+    display: none;
+  }
+
+  .add-subject-plus {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .add-subject-label {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .add-subject-form {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .add-subject-tile.adding .add-subject-form {
+    display: flex;
+  }
+
+  .add-subject-form-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .add-subject-input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid rgba(28,28,26,0.3);
+    border-radius: 4px;
+    padding: 6px 8px;
+    background: var(--bg-surface, #ffffff);
+    color: var(--text-primary, #14251d);
+  }
+
+  .add-subject-input:focus {
+    outline: none;
+    border-color: var(--text-primary, #14251d);
+  }
+
+  .add-subject-tile.has-duplicate-warning .add-subject-input {
+    border-color: #8b2e3f;
+    background: rgba(139,46,63,0.06);
+  }
+
+  .add-subject-warning {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #8b2e3f;
+    background: rgba(139,46,63,0.08);
+    border: 1px solid rgba(139,46,63,0.25);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+
+  .add-subject-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .add-subject-confirm,
+  .add-subject-cancel {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.12s ease;
+  }
+
+  .add-subject-confirm {
+    background: #2d6a4f;
+    color: #fdf9f0;
+  }
+
+  .add-subject-cancel {
+    background: var(--bg-subtle, #f4f5f7);
+    color: #6b6558;
+  }
+
+  .add-subject-confirm:hover,
+  .add-subject-cancel:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .add-subject-confirm:active,
+  .add-subject-cancel:active {
+    transform: translateY(1px);
   }
 
   /* ---------- Revision overview tiles (main page) ---------- */
@@ -968,6 +2510,9 @@
     stroke-width: 5;
     stroke-linecap: round;
     transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    filter:
+      drop-shadow(0 0 2.5px var(--ring-glow-tight, transparent))
+      drop-shadow(0 0 6px var(--ring-glow-soft, transparent));
   }
 
   .ring-label {
@@ -986,7 +2531,7 @@
   .daily-section {
     margin-top: 44px;
     padding-top: 28px;
-    border-top: 2px solid #1c1c1a;
+    border-top: 2px solid var(--text-primary, #14251d);
   }
 
   .daily-header {
@@ -1002,7 +2547,7 @@
     font-family: 'Fraunces', serif;
     font-weight: 600;
     font-size: clamp(22px, 3vw, 28px);
-    color: #1c1c1a;
+    color: var(--text-primary, #14251d);
     text-shadow:
       0 1px 0 rgba(255,255,255,0.9),
       0 2px 0 rgba(255,255,255,0.5),
@@ -1030,9 +2575,9 @@
   }
 
   .cal-nav-btn {
-    background: #fffdf8;
-    border: 1.5px solid #1c1c1a;
-    border-radius: 4px;
+    background: linear-gradient(155deg, var(--bg-surface, #ffffff) 0%, var(--bg-hover, #eef1f0) 100%);
+    border: 1.5px solid var(--text-primary, #14251d);
+    border-radius: 5px;
     width: 30px;
     height: 30px;
     cursor: pointer;
@@ -1040,9 +2585,21 @@
     font: inherit;
     line-height: 1;
     color: inherit;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 2px 3px rgba(28,28,26,0.15);
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, background 0.12s ease;
   }
 
-  .cal-nav-btn:hover { background: #eee8db; }
+  .cal-nav-btn:hover {
+    background: linear-gradient(155deg, var(--bg-surface, #ffffff) 0%, var(--bg-subtle, #f4f5f7) 100%);
+    transform: translateY(-1px);
+  }
+
+  .cal-nav-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 1px rgba(28,28,26,0.2) inset;
+  }
 
   .cal-month-label {
     font-family: 'Fraunces', serif;
@@ -1053,20 +2610,31 @@
   }
 
   .cal-today-btn {
-    background: #1c1c1a;
-    color: #f6f3ec;
-    border: none;
-    border-radius: 4px;
+    background: var(--accent-green, #1f7a4d);
+    color: var(--bg-page, #f4f5f7);
+    border: 1px solid var(--accent-green, #1f7a4d);
+    border-radius: 5px;
     padding: 6px 12px;
     font: inherit;
     font-size: 12px;
     cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(31,122,77,0.25);
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, filter 0.12s ease;
   }
 
-  .cal-today-btn:hover { opacity: 0.85; }
+  .cal-today-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+  }
+
+  .cal-today-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(31,122,77,0.3);
+  }
 
   .cal-grid {
-    border: 1.5px solid #1c1c1a;
+    border: 1.5px solid var(--text-primary, #14251d);
     border-radius: 4px;
     overflow: hidden;
     background: linear-gradient(160deg, #fbfaf6 0%, #f3f1ea 100%);
@@ -1075,11 +2643,11 @@
   .cal-dow-row {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    background: #1c1c1a;
+    background: var(--text-primary, #14251d);
   }
 
   .cal-dow {
-    color: #f6f3ec;
+    color: var(--bg-page, #f4f5f7);
     font-size: 10px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -1100,8 +2668,8 @@
 
   .cal-day {
     min-height: 68px;
-    border-right: 1px solid #1c1c1a1a;
-    border-bottom: 1px solid #1c1c1a1a;
+    border-right: 1px solid var(--text-primary, #14251d)1a;
+    border-bottom: 1px solid var(--text-primary, #14251d)1a;
     padding: 6px 6px 8px;
     display: flex;
     flex-direction: column;
@@ -1112,17 +2680,23 @@
     color: inherit;
     cursor: pointer;
     position: relative;
-    transition: background 0.15s ease, box-shadow 0.15s ease;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .cal-day:hover, .cal-day:focus-visible {
-    background: #fffdf8;
-    box-shadow: inset 0 0 0 1px #1c1c1a22, inset 0 2px 6px rgba(0,0,0,0.06);
+    background: var(--bg-surface, #ffffff);
+    box-shadow: inset 0 0 0 1px var(--text-primary, #14251d)22, inset 0 2px 6px rgba(0,0,0,0.06);
+    transform: scale(1.03);
     z-index: 1;
   }
 
+  .cal-day:active {
+    transform: scale(0.98);
+    box-shadow: inset 0 2px 4px rgba(28,28,26,0.15);
+  }
+
   .cal-day:focus-visible {
-    outline: 2px solid #1c1c1a;
+    outline: 2px solid var(--text-primary, #14251d);
     outline-offset: -2px;
   }
 
@@ -1213,7 +2787,7 @@
   }
 
   .cal-pct-badge.empty {
-    background: #eee8db;
+    background: var(--bg-subtle, #f4f5f7);
     color: #8a8478;
   }
 
@@ -1271,6 +2845,78 @@
       0 1px 1px rgba(28,28,26,0.18);
   }
 
+  /* ---------- Activity feed ---------- */
+
+  .activity-feed-list {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .activity-day-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .activity-day-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    opacity: 0.5;
+    margin-bottom: 2px;
+  }
+
+  .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid rgba(28,28,26,0.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 2px rgba(28,28,26,0.05);
+  }
+
+  .activity-row-icon {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .activity-row-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+  }
+
+  .activity-row-time {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    opacity: 0.5;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 560px) {
+    .activity-row {
+      flex-wrap: wrap;
+    }
+
+    .activity-row-time {
+      width: 100%;
+      padding-left: 36px;
+    }
+  }
+
   .subject-stats {
     display: flex;
     gap: 18px;
@@ -1292,17 +2938,28 @@
   }
 
   .add-btn {
-    background: #1c1c1a;
-    color: #f6f3ec;
-    border: none;
-    border-radius: 4px;
+    background: var(--accent-green, #1f7a4d);
+    color: var(--bg-page, #f4f5f7);
+    border: 1px solid var(--accent-green, #1f7a4d);
+    border-radius: 5px;
     padding: 8px 14px;
     font: inherit;
     font-size: 13px;
     cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(31,122,77,0.25);
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, filter 0.12s ease;
   }
 
-  .add-btn:hover { opacity: 0.88; }
+  .add-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+  }
+
+  .add-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(31,122,77,0.3);
+  }
 
   .save-note {
     font-size: 11px;
@@ -1310,10 +2967,13 @@
   }
 
   .table-wrap {
-    border: 1.5px solid #1c1c1a;
-    border-radius: 4px;
+    border: 1.5px solid var(--text-primary, #14251d);
+    border-radius: 6px;
     overflow: auto;
-    background: #fffdf8;
+    background: var(--bg-surface, #ffffff);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.7) inset,
+      0 2px 6px rgba(28,28,26,0.1);
   }
 
   /* ---------- Custom scrollbars (Webkit + Firefox) ---------- */
@@ -1321,7 +2981,7 @@
   .table-wrap,
   .cal-weeks {
     scrollbar-width: thin;
-    scrollbar-color: #9c9d9f #eee8db;
+    scrollbar-color: #9c9d9f var(--bg-subtle, #f4f5f7);
   }
 
   .table-wrap::-webkit-scrollbar {
@@ -1330,7 +2990,7 @@
   }
 
   .table-wrap::-webkit-scrollbar-track {
-    background: #eee8db;
+    background: var(--bg-subtle, #f4f5f7);
     border-radius: 4px;
   }
 
@@ -1345,7 +3005,7 @@
   }
 
   .table-wrap::-webkit-scrollbar-corner {
-    background: #eee8db;
+    background: var(--bg-subtle, #f4f5f7);
   }
 
   table {
@@ -1356,22 +3016,23 @@
 
   thead th {
     text-align: left;
-    background: #1c1c1a;
-    color: #f6f3ec;
+    background: linear-gradient(180deg, #2a2a28 0%, var(--text-primary, #14251d) 55%, #131311 100%);
+    color: var(--bg-page, #f4f5f7);
     font-weight: 600;
     font-size: 11px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     padding: 10px 12px;
     white-space: nowrap;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset;
   }
 
   tbody tr {
-    border-top: 1px solid #1c1c1a22;
+    border-top: 1px solid var(--text-primary, #14251d)22;
   }
 
   tbody tr:hover {
-    background: #f2ede0;
+    background: var(--bg-hover, #eef1f0);
   }
 
   td {
@@ -1383,23 +3044,33 @@
   td input[type="number"],
   td input[type="date"] {
     width: 100%;
-    border: 1px solid transparent;
-    background: transparent;
+    border: 1px solid rgba(28,28,26,0.12);
+    background: rgba(28,28,26,0.025);
     font: inherit;
     font-size: 13px;
     color: inherit;
     padding: 5px 6px;
-    border-radius: 3px;
+    border-radius: 4px;
+    box-shadow:
+      0 1px 2px rgba(28,28,26,0.08) inset,
+      0 1px 0 rgba(255,255,255,0.5);
+    transition: box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   }
 
   td input[type="number"] { width: 64px; }
 
-  td input:hover { border-color: #1c1c1a33; }
+  td input:hover {
+    border-color: var(--text-primary, #14251d)33;
+    background: rgba(28,28,26,0.04);
+  }
 
   td input:focus {
     outline: none;
-    border-color: #1c1c1a;
+    border-color: var(--text-primary, #14251d);
     background: #fff;
+    box-shadow:
+      0 1px 3px rgba(28,28,26,0.18) inset,
+      0 1px 0 rgba(255,255,255,0.6);
   }
 
   .chapter-name-cell input {
@@ -1411,12 +3082,30 @@
   select.subject-select {
     font: inherit;
     font-size: 12px;
-    border: 1px solid #1c1c1a33;
-    border-radius: 3px;
+    border: 1px solid var(--text-primary, #14251d)33;
+    border-radius: 4px;
     padding: 5px 6px;
     background: #fff;
     color: inherit;
     width: 100%;
+    box-shadow:
+      0 1px 2px rgba(28,28,26,0.1) inset,
+      0 1px 0 rgba(255,255,255,0.5);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  select.revision-select:hover,
+  select.subject-select:hover {
+    border-color: var(--text-primary, #14251d)55;
+  }
+
+  select.revision-select:focus,
+  select.subject-select:focus {
+    outline: none;
+    border-color: var(--text-primary, #14251d);
+    box-shadow:
+      0 1px 3px rgba(28,28,26,0.15) inset,
+      0 1px 0 rgba(255,255,255,0.6);
   }
 
   /* ---------- Revised pulse / checkmark celebration ---------- */
@@ -1483,9 +3172,17 @@
     font-size: 15px;
     padding: 4px 6px;
     line-height: 1;
+    transition: opacity 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  .del-btn:hover { opacity: 0.6; }
+  .del-btn:hover {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+
+  .del-btn:active {
+    transform: scale(0.9);
+  }
 
   .empty-state {
     padding: 40px 20px;
@@ -1543,18 +3240,29 @@
 
   .empty-state-cta {
     margin-top: 6px;
-    background: #1c1c1a;
-    color: #f6f3ec;
-    border: none;
-    border-radius: 4px;
+    background: var(--accent-green, #1f7a4d);
+    color: var(--bg-page, #f4f5f7);
+    border: 1px solid var(--accent-green, #1f7a4d);
+    border-radius: 5px;
     padding: 8px 16px;
     font: inherit;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(31,122,77,0.25);
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s ease, filter 0.12s ease;
   }
 
-  .empty-state-cta:hover { opacity: 0.88; }
+  .empty-state-cta:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+  }
+
+  .empty-state-cta:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(31,122,77,0.3);
+  }
 
   .daily-row-done td { opacity: 0.5; }
 
@@ -1619,7 +3327,7 @@
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 10px;
-    background: #eee8db;
+    background: var(--bg-subtle, #f4f5f7);
   }
 
   .due-status {
@@ -1642,6 +3350,7 @@
     padding: 3px 10px 3px 8px;
     border-radius: 10px;
     cursor: pointer;
+    transition: filter 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .due-status-check input[type="checkbox"] {
@@ -1655,24 +3364,42 @@
   .due-status-check.overdue { background: #f4c8ce; color: #8b2e3f; }
   .due-status-check.done { background: #cde5d3; color: #23663c; }
 
-  .due-status-check:hover { filter: brightness(0.96); }
+  .due-status-check:hover {
+    filter: brightness(0.96);
+    transform: translateY(-1px);
+  }
+
+  .due-status-check:active {
+    transform: translateY(0);
+    filter: brightness(0.92);
+  }
 
   .mark-done-btn {
-    background: #1c1c1a;
-    color: #f6f3ec;
+    background: var(--text-primary, #14251d);
+    color: var(--bg-page, #f4f5f7);
     border: none;
     border-radius: 4px;
     padding: 4px 10px;
     font: inherit;
     font-size: 11px;
     cursor: pointer;
+    transition: opacity 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  .mark-done-btn:hover { opacity: 0.85; }
+  .mark-done-btn:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+  }
+
+  .mark-done-btn:active {
+    transform: translateY(1px);
+    opacity: 0.75;
+  }
 
   .mark-done-btn:disabled {
     opacity: 0.35;
     cursor: default;
+    transform: none;
   }
 
   .field-with-check {
@@ -1701,8 +3428,8 @@
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: #1c1c1a;
-    color: #f6f3ec;
+    background: var(--text-primary, #14251d);
+    color: var(--bg-page, #f4f5f7);
     padding: 10px 18px;
     border-radius: 6px;
     display: none;
@@ -1718,6 +3445,31 @@
 
   .toast.visible { display: flex; opacity: 1; }
 
+  .toast-undo-btn {
+    background: transparent;
+    border: 1px solid rgba(246,243,236,0.4);
+    color: #6fe0a0;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .toast-undo-btn:hover {
+    background: rgba(111,224,160,0.12);
+    transform: translateY(-1px);
+  }
+
+  .toast-undo-btn:active {
+    transform: translateY(1px);
+  }
+
   @media (max-width: 700px) {
     .table-wrap { overflow-x: auto; }
     table { min-width: 620px; }
@@ -1732,6 +3484,40 @@
 </head>
 <body>
 
+<div class="lock-overlay" id="lock-overlay" aria-hidden="true">
+  <div class="lock-panel">
+    <div class="lock-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="10.5" width="16" height="10" rx="2"></rect>
+        <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5"></path>
+      </svg>
+    </div>
+    <div class="lock-title" id="lock-title">Enter PIN</div>
+    <div class="lock-sub" id="lock-sub">Unlock your dashboard</div>
+
+    <div class="lock-dots" id="lock-dots"></div>
+
+    <div class="lock-error" id="lock-error"></div>
+
+    <div class="lock-keypad" id="lock-keypad">
+      <button class="lock-key" data-key="1">1</button>
+      <button class="lock-key" data-key="2">2</button>
+      <button class="lock-key" data-key="3">3</button>
+      <button class="lock-key" data-key="4">4</button>
+      <button class="lock-key" data-key="5">5</button>
+      <button class="lock-key" data-key="6">6</button>
+      <button class="lock-key" data-key="7">7</button>
+      <button class="lock-key" data-key="8">8</button>
+      <button class="lock-key" data-key="9">9</button>
+      <span></span>
+      <button class="lock-key" data-key="0">0</button>
+      <button class="lock-key lock-key-back" id="lock-backspace" aria-label="Backspace">&#9003;</button>
+    </div>
+
+    <p class="lock-forgot-note">Forgot your PIN? Clear this site's data in your browser settings to reset the app (this also erases your saved progress unless you've exported a backup).</p>
+  </div>
+</div>
+
 <header>
   <div class="header-inner">
     <div class="owner-name-badge" id="owner-name-badge">
@@ -1741,6 +3527,7 @@
 
     <div class="timer-toggle-wrap" id="timer-toggle-wrap">
       <div class="timer-widget" id="timer-widget">
+        <span class="scan-sweep" aria-hidden="true"></span>
         <div class="timer-left">
           <span class="timer-label" id="timer-mode-label">Stopwatch</span>
           <span class="timer-display" id="timer-display">00:00:00</span>
@@ -1779,120 +3566,265 @@
         <span class="editable-text" id="main-title-text" contenteditable="false" spellcheck="false">MBBS Dashboard</span><span class="dot">.</span>
         <button class="inline-edit-btn" id="edit-title-btn" title="Edit dashboard title" aria-label="Edit dashboard title">&#9998;</button>
       </h1>
-      <div class="eyebrow">
-        <strong class="editable-text" id="exam-name-1-text" contenteditable="false" spellcheck="false">INI-CET</strong>
-        &nbsp;&middot;&nbsp; 19 Subjects
-        <button class="inline-edit-btn" id="edit-exam-names-btn" title="Edit exam name" aria-label="Edit exam name">&#9998;</button>
-      </div>
     </div>
-    <p class="subtitle" id="header-subtitle">Select a subject to open its chapter tracker, or a date to log that day's target.</p>
+    <div class="eyebrow">
+      <strong class="editable-text" id="exam-name-1-text" contenteditable="false" spellcheck="false">INI-CET</strong>
+      <button class="inline-edit-btn" id="edit-exam-names-btn" title="Edit exam name" aria-label="Edit exam name">&#9998;</button>
+      <span class="creator-credit">&middot; Created by Dr Sushant Kumar</span>
+    </div>
+    <p class="subtitle" id="header-subtitle"></p>
 
     <div class="date-strip" id="date-strip">
-      <div class="date-block">
-        <span class="date-label">Today</span>
-        <span class="date-value" id="today-display"></span>
+      <div class="week-strip-header">
+        <div class="week-strip-date">
+          <span class="week-strip-dow" id="week-strip-dow"></span>
+          <span class="week-strip-year" id="week-strip-year"></span>
+        </div>
+        <span class="week-strip-month" id="week-strip-month"></span>
       </div>
-      <div class="date-sep"></div>
-      <div class="date-block">
-        <span class="date-label">Calendar showing</span>
-        <span class="date-value" id="calendar-sync-display"></span>
-      </div>
-      <div class="date-sep"></div>
-      <div class="date-block">
-        <span class="date-label">Exam date</span>
-        <input type="date" class="exam-date-input" id="exam-date-input" />
-      </div>
-      <div class="date-sep"></div>
-      <div class="date-block countdown-block">
-        <span class="date-label">Days remaining</span>
-        <span class="date-value" id="countdown-display">—</span>
+      <div class="week-strip-row" id="week-strip-row"></div>
+      <div class="date-strip-stats">
+        <div class="date-strip-stat">
+          <span class="date-strip-label">Exam date</span>
+          <div class="exam-date-display-wrap">
+            <span class="exam-date-display-text" id="exam-date-display-text">Not set</span>
+            <input type="date" class="exam-date-input" id="exam-date-input" />
+          </div>
+        </div>
+        <div class="date-strip-stat">
+          <span class="date-strip-label">Days remaining</span>
+          <span class="date-strip-value" id="countdown-display">—</span>
+        </div>
       </div>
     </div>
 
-    <div class="timer-toggle-strip" id="timer-toggle-strip">
-      <div class="toggle-strip-group">
-        <button class="timer-toggle-btn shortcut-icon-btn backup-icon-btn" id="export-backup-btn" title="Export backup (download JSON)" aria-label="Export backup">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3v12"></path>
-            <path d="M7 10l5 5 5-5"></path>
-            <path d="M4 19h16"></path>
+    <div class="header-hub-row">
+    <div class="hub-toggle-strip" id="hub-toggle-strip">
+      <div class="hub-wrap" id="hub-wrap">
+        <button class="hub-btn" id="hub-toggle-btn" title="Open quick actions" aria-label="Open quick actions" aria-expanded="false">
+          <svg class="hub-icon-dots" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"></circle>
+            <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"></circle>
+            <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"></circle>
+            <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"></circle>
+          </svg>
+          <svg class="hub-icon-close" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 6l12 12M18 6L6 18"></path>
           </svg>
         </button>
 
-        <button class="timer-toggle-btn shortcut-icon-btn backup-icon-btn" id="import-backup-btn" title="Import backup (restore from JSON)" aria-label="Import backup">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 21V9"></path>
-            <path d="M7 14l5-5 5 5"></path>
-            <path d="M4 5h16"></path>
-          </svg>
-        </button>
-        <input type="file" id="import-file-input" accept="application/json" style="display:none" />
-      </div>
-
-      <div class="toggle-strip-group">
-        <button class="timer-toggle-btn" id="timer-toggle-btn" title="Show/hide study timer" aria-label="Toggle study timer widget" aria-pressed="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="13" r="8"></circle>
-            <path d="M12 9v4l3 2"></path>
-            <path d="M9 2h6"></path>
-            <path d="M18.5 5.5l1.5-1.5"></path>
-          </svg>
-        </button>
-
-        <button class="timer-toggle-btn shortcut-icon-btn" id="open-revision-due-icon-btn" title="Open Chapters Due for Revision" aria-label="Open Chapters Due for Revision">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 11l2 2 4-4"></path>
-            <rect x="3" y="4" width="18" height="17" rx="2"></rect>
-            <path d="M3 9h18"></path>
-          </svg>
-          <span class="shortcut-badge" id="shortcut-due-badge"></span>
-        </button>
-
-        <button class="timer-toggle-btn shortcut-icon-btn" id="open-revision-backlog-icon-btn" title="Open Revision Backlog" aria-label="Open Revision Backlog">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="8.5"></circle>
-            <path d="M12 7.5v5l3.5 2"></path>
-          </svg>
-          <span class="shortcut-badge" id="shortcut-backlog-badge"></span>
-        </button>
-
-        <div class="color-picker-wrap">
-          <button class="timer-toggle-btn color-swatch-btn" id="tile-color-btn" title="Change tile color" aria-label="Change tile color" aria-expanded="false">
-            <span class="color-swatch-dot" id="tile-color-dot"></span>
-          </button>
-          <div class="color-picker-popover" id="color-picker-popover">
-            <div class="color-swatch-grid" id="color-swatch-grid"></div>
-          </div>
-        </div>
-
-        <div class="color-picker-wrap">
-          <button class="timer-toggle-btn shortcut-icon-btn profile-icon-btn" id="profile-info-btn" title="Personal information" aria-label="Open personal information" aria-expanded="false">
+        <div class="hub-satellite" data-hub-index="0">
+          <button class="timer-toggle-btn" id="timer-toggle-btn" title="Show/hide study timer" aria-label="Toggle study timer widget" aria-pressed="true">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="8" r="4"></circle>
-              <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+              <circle cx="12" cy="13" r="8"></circle>
+              <path d="M12 9v4l3 2"></path>
+              <path d="M9 2h6"></path>
+              <path d="M18.5 5.5l1.5-1.5"></path>
             </svg>
           </button>
-          <div class="color-picker-popover profile-popover" id="profile-popover">
-            <div class="profile-field">
-              <label for="profile-name-input">Name</label>
-              <input type="text" id="profile-name-input" placeholder="Your name" autocomplete="off" />
+        </div>
+
+        <div class="hub-satellite" data-hub-index="1">
+          <button class="timer-toggle-btn shortcut-icon-btn" id="open-revision-due-icon-btn" title="Open Chapters Due for Revision" aria-label="Open Chapters Due for Revision">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11l2 2 4-4"></path>
+              <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+              <path d="M3 9h18"></path>
+            </svg>
+            <span class="shortcut-badge" id="shortcut-due-badge"></span>
+          </button>
+        </div>
+
+        <div class="hub-satellite" data-hub-index="2">
+          <button class="timer-toggle-btn shortcut-icon-btn" id="open-revision-backlog-icon-btn" title="Open Revision Backlog" aria-label="Open Revision Backlog">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.5"></circle>
+              <path d="M12 7.5v5l3.5 2"></path>
+            </svg>
+            <span class="shortcut-badge" id="shortcut-backlog-badge"></span>
+          </button>
+        </div>
+
+        <div class="hub-satellite" data-hub-index="3">
+          <div class="color-picker-wrap">
+            <button class="timer-toggle-btn shortcut-icon-btn settings-icon-btn" id="settings-menu-btn" title="Settings" aria-label="Open settings" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"></path>
+              </svg>
+            </button>
+
+            <!-- Settings main menu -->
+            <div class="color-picker-popover color-menu-popover" id="settings-menu-popover">
+              <div class="color-menu-list">
+                <button class="color-menu-item" id="open-profile-panel-btn">
+                  <span class="settings-menu-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="8" r="4"></circle>
+                      <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+                    </svg>
+                  </span>
+                  <span>Personal info</span>
+                </button>
+                <button class="color-menu-item" id="open-tile-color-btn">
+                  <span class="color-swatch-dot" id="tile-color-dot"></span>
+                  <span>Tile color</span>
+                </button>
+                <button class="color-menu-item" id="open-bg-color-btn">
+                  <span class="bg-swatch-dot" id="bg-color-dot"></span>
+                  <span>Background color</span>
+                </button>
+                <button class="color-menu-item" id="open-backup-panel-btn">
+                  <span class="settings-menu-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 3v12"></path>
+                      <path d="M7 10l5 5 5-5"></path>
+                      <path d="M4 19h16"></path>
+                    </svg>
+                  </span>
+                  <span>Backup &amp; restore</span>
+                </button>
+                <button class="color-menu-item" id="open-app-lock-panel-btn">
+                  <span class="settings-menu-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="4" y="10.5" width="16" height="10" rx="2"></rect>
+                      <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5"></path>
+                    </svg>
+                  </span>
+                  <span>App lock</span>
+                </button>
+              </div>
             </div>
-            <div class="profile-field">
-              <label for="profile-work-input">Work</label>
-              <input type="text" id="profile-work-input" placeholder="e.g. MBBS intern" autocomplete="off" />
+
+            <!-- Personal info sub-panel -->
+            <div class="color-picker-popover profile-popover" id="profile-popover">
+              <button class="color-submenu-back" id="profile-back-btn">&larr; Back</button>
+              <div class="profile-field">
+                <label for="profile-name-input">Name</label>
+                <input type="text" id="profile-name-input" placeholder="Your name" autocomplete="off" />
+              </div>
+              <div class="profile-field">
+                <label for="profile-work-input">Work</label>
+                <input type="text" id="profile-work-input" placeholder="e.g. MBBS intern" autocomplete="off" />
+              </div>
+              <div class="profile-field">
+                <label for="profile-phone-input">Phone number</label>
+                <input type="tel" id="profile-phone-input" placeholder="Phone number" autocomplete="off" />
+              </div>
+              <div class="profile-field">
+                <label for="profile-email-input">Email</label>
+                <input type="email" id="profile-email-input" placeholder="Email" autocomplete="off" />
+              </div>
+              <p class="profile-note">Saved on this device only. Name shows in the top-right corner once set.</p>
             </div>
-            <div class="profile-field">
-              <label for="profile-phone-input">Phone number</label>
-              <input type="tel" id="profile-phone-input" placeholder="Phone number" autocomplete="off" />
+
+            <!-- Tile color sub-panel -->
+            <div class="color-picker-popover" id="color-picker-popover">
+              <button class="color-submenu-back" id="tile-color-back-btn">&larr; Back</button>
+              <div class="color-swatch-grid" id="color-swatch-grid"></div>
             </div>
-            <div class="profile-field">
-              <label for="profile-email-input">Email</label>
-              <input type="email" id="profile-email-input" placeholder="Email" autocomplete="off" />
+
+            <!-- Background color sub-panel -->
+            <div class="color-picker-popover" id="bg-color-popover">
+              <button class="color-submenu-back" id="bg-color-back-btn">&larr; Back</button>
+              <div class="color-swatch-grid" id="bg-color-swatch-grid"></div>
             </div>
-            <p class="profile-note">Saved on this device only. Name shows in the top-right corner once set.</p>
+
+            <!-- Backup & restore sub-panel -->
+            <div class="color-picker-popover backup-popover" id="backup-popover">
+              <button class="color-submenu-back" id="backup-back-btn">&larr; Back</button>
+
+              <button class="color-menu-item" id="sync-backup-btn">
+                <span class="settings-menu-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12a9 9 0 1 1-3-6.7"></path>
+                    <path d="M21 4v5h-5"></path>
+                  </svg>
+                </span>
+                <span>Sync now</span>
+              </button>
+              <p class="backup-sync-status" id="backup-sync-status">Not synced yet</p>
+              <p class="sync-provenance-status" id="sync-provenance-status"></p>
+              <p class="device-name-note" id="device-name-note"></p>
+
+              <div class="backup-divider"></div>
+
+              <button class="color-menu-item" id="export-backup-btn">
+                <span class="settings-menu-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v12"></path>
+                    <path d="M7 10l5 5 5-5"></path>
+                    <path d="M4 19h16"></path>
+                  </svg>
+                </span>
+                <span>Export new backup</span>
+              </button>
+              <button class="color-menu-item" id="import-backup-btn">
+                <span class="settings-menu-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 21V9"></path>
+                    <path d="M7 14l5-5 5 5"></path>
+                    <path d="M4 5h16"></path>
+                  </svg>
+                </span>
+                <span>Import backup</span>
+              </button>
+              <input type="file" id="import-file-input" accept="application/json" style="display:none" />
+            </div>
+
+            <!-- App lock sub-panel -->
+            <div class="color-picker-popover applock-popover" id="applock-popover">
+              <button class="color-submenu-back" id="applock-back-btn">&larr; Back</button>
+              <p class="applock-desc" id="applock-status-desc">No PIN set — anyone who opens this app can see everything.</p>
+              <p class="applock-note">A PIN only stops someone from casually opening this app on your unlocked phone. It's stored on this device only and isn't real encryption — your iPhone's own passcode/Face ID is still your strongest protection.</p>
+              <button class="applock-action-btn" id="applock-set-btn">Set a PIN</button>
+              <button class="applock-action-btn applock-remove-btn" id="applock-remove-btn" style="display:none">Remove PIN</button>
+            </div>
           </div>
         </div>
+
+        <div class="hub-satellite" data-hub-index="4">
+          <div class="color-picker-wrap">
+            <button class="timer-toggle-btn shortcut-icon-btn" id="add-section-toggle-btn" title="Add a new section" aria-label="Add a new section" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+            </button>
+            <div class="color-picker-popover add-section-popover" id="add-section-popover">
+              <label class="add-section-popover-label">New section name</label>
+              <input type="text" class="add-section-input" id="add-section-input" placeholder="e.g. Electives" autocomplete="off" />
+              <div class="add-section-actions">
+                <button class="add-section-cancel" id="add-section-cancel-btn">Cancel</button>
+                <button class="add-section-confirm" id="add-section-confirm-btn">Create</button>
+              </div>
+
+              <div class="remove-section-block" id="remove-section-block">
+                <div class="add-section-divider"></div>
+                <label class="add-section-popover-label">Remove a section</label>
+                <div class="remove-section-list" id="remove-section-list"></div>
+              </div>
+
+              <div class="section-confirm-remove" id="section-confirm-remove">
+                <p class="section-confirm-text" id="section-confirm-text"></p>
+                <div class="section-confirm-actions">
+                  <button class="section-confirm-cancel" id="section-confirm-cancel-btn">Cancel</button>
+                  <button class="section-confirm-delete" id="section-confirm-delete-btn">Remove</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hub-satellite" data-hub-index="5">
+          <button class="timer-toggle-btn shortcut-icon-btn" id="open-activity-feed-btn" title="Open Activity feed" aria-label="Open Activity feed">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12h4l2-7 4 14 2-7h6"></path>
+            </svg>
+          </button>
+        </div>
       </div>
+    </div>
     </div>
 
     <div class="breadcrumb" id="breadcrumb">
@@ -1902,6 +3834,7 @@
 </header>
 
 <main>
+
   <div id="view-subjects">
     <div id="subject-grid-container"></div>
 
@@ -1919,7 +3852,6 @@
               <span class="overview-count-badge" id="revision-due-count-badge">0</span>
             </div>
             <div class="tile-meta">
-              <span class="tile-hint">click to open</span>
               <span class="tile-progress-label" id="revision-due-summary">nothing due</span>
             </div>
           </div>
@@ -1932,7 +3864,6 @@
               <span class="overview-count-badge overdue-badge" id="revision-backlog-count-badge">0</span>
             </div>
             <div class="tile-meta">
-              <span class="tile-hint">click to open</span>
               <span class="tile-progress-label" id="revision-backlog-summary">no backlog</span>
             </div>
           </div>
@@ -1967,10 +3898,12 @@
   <div id="view-revision-due" class="hidden"></div>
   <div id="view-revision-backlog" class="hidden"></div>
   <div id="view-day" class="hidden"></div>
+  <div id="view-activity-feed" class="hidden"></div>
 </main>
 
 <div class="toast" id="toast">
   <span id="toast-text"></span>
+  <button class="toast-undo-btn" id="toast-undo-btn" style="display:none">Undo</button>
 </div>
 
 <script>
@@ -2004,6 +3937,311 @@
     "Para-Clinical": { tag: "Yr 2", tint: "#9c6b1f" },
     "Clinical": { tag: "Yr 3–4", tint: "#8b2e3f" },
   };
+
+  // ---------- Removed built-in subjects ----------
+  // The 19 default subjects are hardcoded above, so removing one can't be
+  // done by simply deleting it from an array — it would just reappear on
+  // the next page load. Instead we keep a persisted list of IDs to filter
+  // out every time SUBJECTS is used, applied immediately below before any
+  // other code reads the array (weightage totals, grouping, rendering).
+  const REMOVED_BUILTIN_KEY = "rounds_removed_builtin_subjects_v1";
+
+  function loadRemovedBuiltinIds() {
+    try {
+      const raw = localStorage.getItem(REMOVED_BUILTIN_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error("Failed to load removed built-in subjects", e);
+      return [];
+    }
+  }
+
+  function saveRemovedBuiltinIds(list) {
+    try {
+      localStorage.setItem(REMOVED_BUILTIN_KEY, JSON.stringify(list));
+    } catch (e) {
+      console.error("Failed to save removed built-in subjects", e);
+    }
+  }
+
+  function applyRemovedBuiltinFilter() {
+    const removedIds = loadRemovedBuiltinIds();
+    if (removedIds.length === 0) return;
+    for (let i = SUBJECTS.length - 1; i >= 0; i--) {
+      if (removedIds.includes(SUBJECTS[i].id)) SUBJECTS.splice(i, 1);
+    }
+  }
+  applyRemovedBuiltinFilter();
+
+  // ---------- User-added custom sections (groups) ----------
+  // Beyond the 3 built-in sections (Pre-Clinical / Para-Clinical /
+  // Clinical), the user can add their own — e.g. "Electives" or "Extra
+  // Revision". Stored separately so the 3 defaults stay structurally
+  // stable, merged into GROUPS/GROUP_META at startup before anything
+  // else reads them (grouping, rendering, the default-label snapshot).
+  const CUSTOM_GROUPS_KEY = "rounds_custom_groups_v1";
+
+  function loadCustomGroups() {
+    try {
+      const raw = localStorage.getItem(CUSTOM_GROUPS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error("Failed to load custom groups", e);
+      return [];
+    }
+  }
+
+  function saveCustomGroups(list) {
+    try {
+      localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(list));
+    } catch (e) {
+      console.error("Failed to save custom groups", e);
+    }
+  }
+
+  function mergeCustomGroups() {
+    const custom = loadCustomGroups();
+    custom.forEach(g => {
+      if (!GROUPS.includes(g.key)) {
+        GROUPS.push(g.key);
+        GROUP_META[g.key] = { tag: g.tag, tint: g.tint, custom: true };
+      }
+    });
+  }
+  mergeCustomGroups();
+
+  const GROUP_TINT_PRESETS = ["#2d6a4f", "#9c6b1f", "#8b2e3f", "#3d5a80", "#6a4c93", "#a4506c", "#4a7c59", "#7a5195"];
+
+  function addCustomGroup(label) {
+    const trimmed = (label || "").trim();
+    if (!trimmed) return null;
+    const key = "group_" + trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "_" + Math.random().toString(36).slice(2, 6);
+    const custom = loadCustomGroups();
+    const tint = GROUP_TINT_PRESETS[custom.length % GROUP_TINT_PRESETS.length];
+    const newGroup = { key, label: trimmed, tag: "", tint, custom: true };
+    GROUPS.push(key);
+    GROUP_META[key] = { tag: "", tint, custom: true };
+    // GROUP_DEFAULT_LABELS/TAGS are normally built once at page load from
+    // whatever's already in storage — a group created just now at runtime
+    // needs its own entry added here too, or getGroupLabel()/getGroupTag()
+    // would resolve to undefined for it until the next full page reload.
+    GROUP_DEFAULT_LABELS[key] = trimmed;
+    GROUP_DEFAULT_TAGS[key] = "";
+    custom.push(newGroup);
+    saveCustomGroups(custom);
+    return newGroup;
+  }
+
+  function isRemovableGroup(groupKey) {
+    return !!(GROUP_META[groupKey] && GROUP_META[groupKey].custom);
+  }
+
+  // Removing a section only makes sense if it's empty — otherwise its
+  // subjects would need to go somewhere. The confirm dialog in the UI
+  // explains this; this function assumes that check already passed.
+  function removeCustomGroup(groupKey) {
+    if (!isRemovableGroup(groupKey)) return;
+    const idx = GROUPS.indexOf(groupKey);
+    if (idx > -1) GROUPS.splice(idx, 1);
+    delete GROUP_META[groupKey];
+    saveCustomGroups(loadCustomGroups().filter(g => g.key !== groupKey));
+
+    const labelOverrides = loadGroupLabelOverrides();
+    if (labelOverrides[groupKey]) {
+      delete labelOverrides[groupKey];
+      saveGroupLabelOverrides(labelOverrides);
+    }
+  }
+
+  // Snapshot of each group's original display name and year tag, captured
+  // before any saved overrides are applied — used to restore defaults if
+  // an edit is cleared back to blank. Keyed by the internal GROUPS id
+  // (e.g. "Pre-Clinical"), which never changes even if its displayed
+  // label is renamed — every lookup elsewhere (SUBJECTS.filter, etc.)
+  // keeps using this stable internal key.
+  const GROUP_DEFAULT_LABELS = {};
+  const GROUP_DEFAULT_TAGS = {};
+  GROUPS.forEach(g => {
+    // Custom groups store their own chosen label directly (there's no
+    // separate "default" to fall back to), while built-in groups use
+    // their hardcoded key as the default label, as before.
+    const customMatch = loadCustomGroups().find(c => c.key === g);
+    GROUP_DEFAULT_LABELS[g] = customMatch ? customMatch.label : g;
+    GROUP_DEFAULT_TAGS[g] = GROUP_META[g].tag;
+  });
+
+  // ---------- Activity log ----------
+  // A real, timestamped event log — every meaningful action (chapter
+  // revised, subject added, daily target completed, etc.) appends one
+  // entry here as it happens. This is what powers the Activity feed, and
+  // deliberately isn't reconstructed by diffing snapshots — that
+  // approach can't know exact timestamps or distinguish a single change
+  // from several that canceled out. Capped to the most recent 200
+  // entries so it can't grow unbounded over months of use.
+  const ACTIVITY_LOG_KEY = "rounds_activity_log_v1";
+  const ACTIVITY_LOG_MAX_ENTRIES = 200;
+
+  function loadActivityLog() {
+    try {
+      const raw = localStorage.getItem(ACTIVITY_LOG_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error("Failed to load activity log", e);
+      return [];
+    }
+  }
+
+  function saveActivityLog(entries) {
+    try {
+      localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(entries));
+    } catch (e) {
+      console.error("Failed to save activity log", e);
+    }
+  }
+
+  // type: a short machine tag (e.g. "chapter_revised") used only for
+  // picking an icon/color in the feed — the actual sentence shown to the
+  // user is `text`, built by the caller so it reads naturally.
+  function logActivity(type, text) {
+    const entries = loadActivityLog();
+    entries.unshift({ type, text, timestamp: new Date().toISOString() });
+    if (entries.length > ACTIVITY_LOG_MAX_ENTRIES) entries.length = ACTIVITY_LOG_MAX_ENTRIES;
+    saveActivityLog(entries);
+  }
+
+  // ---------- User-added custom subjects ----------
+  // Stored separately from the built-in SUBJECTS list so the 19 defaults
+  // stay stable; custom ones are merged in at startup before anything
+  // else reads SUBJECTS (weightage totals, grouping, rendering).
+  const CUSTOM_SUBJECTS_KEY = "rounds_custom_subjects_v1";
+
+  function loadCustomSubjects() {
+    try {
+      const raw = localStorage.getItem(CUSTOM_SUBJECTS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error("Failed to load custom subjects", e);
+      return [];
+    }
+  }
+
+  function saveCustomSubjects(list) {
+    try {
+      localStorage.setItem(CUSTOM_SUBJECTS_KEY, JSON.stringify(list));
+    } catch (e) {
+      console.error("Failed to save custom subjects", e);
+    }
+  }
+
+  function mergeCustomSubjects() {
+    const custom = loadCustomSubjects();
+    custom.forEach(c => {
+      if (!SUBJECTS.some(s => s.id === c.id)) SUBJECTS.push(c);
+      // Backfill the custom flag on any older saved entry that predates
+      // it, and on the matching in-memory SUBJECTS record too, so the
+      // Remove option shows correctly for subjects added before this
+      // flag existed.
+      const inMemory = SUBJECTS.find(s => s.id === c.id);
+      if (inMemory) inMemory.custom = true;
+      c.custom = true;
+    });
+    saveCustomSubjects(custom);
+  }
+
+  // Every subject — built-in or custom — can now be removed. This just
+  // confirms the subject actually exists right now (SUBJECTS is the
+  // single source of truth after startup filtering/merging), so the
+  // caller never tries to remove something already gone.
+  function isRemovableSubject(subjectId) {
+    return SUBJECTS.some(s => s.id === subjectId);
+  }
+
+  function slugify(text) {
+    return "custom_" + text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "_" + Math.random().toString(36).slice(2, 6);
+  }
+
+  function addCustomSubject(name, grp) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const newSubject = { id: slugify(trimmed), name: trimmed, grp, w: 3, custom: true };
+    SUBJECTS.push(newSubject);
+    const custom = loadCustomSubjects();
+    custom.push(newSubject);
+    saveCustomSubjects(custom);
+    return newSubject;
+  }
+
+  // Removes any subject — built-in or custom — entirely: drops it from
+  // the in-memory SUBJECTS list, from whichever persisted list it came
+  // from (the removed-built-ins list for the 19 defaults, or the
+  // custom-subjects list for ones added via "+"), from any saved rename
+  // override, and deletes its chapter data. This can't be undone from
+  // within the app — there's no "restore default subject" option.
+  function removeSubjectEntirely(subjectId) {
+    if (!isRemovableSubject(subjectId)) return;
+    const idx = SUBJECTS.findIndex(s => s.id === subjectId);
+    const isCustom = idx !== -1 && !!SUBJECTS[idx].custom;
+    if (idx !== -1) SUBJECTS.splice(idx, 1);
+
+    if (isCustom) {
+      const custom = loadCustomSubjects().filter(s => s.id !== subjectId);
+      saveCustomSubjects(custom);
+    } else {
+      const removedIds = loadRemovedBuiltinIds();
+      if (!removedIds.includes(subjectId)) {
+        removedIds.push(subjectId);
+        saveRemovedBuiltinIds(removedIds);
+      }
+    }
+
+    const nameOverrides = loadSubjectNameOverrides();
+    if (nameOverrides[subjectId]) {
+      delete nameOverrides[subjectId];
+      saveSubjectNameOverrides(nameOverrides);
+    }
+
+    if (DATA[subjectId]) {
+      delete DATA[subjectId];
+      saveData(DATA);
+    }
+  }
+
+  // Reverses removeSubjectEntirely using a snapshot taken beforehand (see
+  // the tile-confirm-delete handler) — restores the subject entry itself,
+  // its chapters, and its rename override, and un-marks it from whichever
+  // removal-tracking list (custom vs built-in) it had been added to.
+  function restoreRemovedSubject(snapshot) {
+    if (!snapshot) return;
+    const { subject, chapters, nameOverride, wasCustom } = snapshot;
+
+    if (!SUBJECTS.some(s => s.id === subject.id)) {
+      SUBJECTS.push(subject);
+    }
+
+    if (wasCustom) {
+      const custom = loadCustomSubjects();
+      if (!custom.some(s => s.id === subject.id)) {
+        custom.push(subject);
+        saveCustomSubjects(custom);
+      }
+    } else {
+      const removedIds = loadRemovedBuiltinIds().filter(id => id !== subject.id);
+      saveRemovedBuiltinIds(removedIds);
+    }
+
+    if (nameOverride) {
+      const nameOverrides = loadSubjectNameOverrides();
+      nameOverrides[subject.id] = nameOverride;
+      saveSubjectNameOverrides(nameOverrides);
+    }
+
+    if (chapters && chapters.length) {
+      DATA[subject.id] = chapters;
+      saveData(DATA);
+    }
+  }
+
+  mergeCustomSubjects();
 
   const maxW = Math.max(...SUBJECTS.map(s => s.w));
 
@@ -2050,9 +4288,18 @@
 
   function renameSubject(subjectId, newName) {
     const subject = subjectById(subjectId);
-    if (!subject) return;
-    const overrides = loadSubjectNameOverrides();
+    if (!subject) return "ok";
     const trimmed = (newName || "").trim();
+
+    if (trimmed) {
+      const normalized = trimmed.toLowerCase();
+      const duplicate = SUBJECTS.find(s =>
+        s.id !== subjectId && s.grp === subject.grp && s.name.trim().toLowerCase() === normalized
+      );
+      if (duplicate) return "duplicate";
+    }
+
+    const overrides = loadSubjectNameOverrides();
     if (trimmed) {
       subject.name = trimmed;
       overrides[subjectId] = trimmed;
@@ -2063,6 +4310,66 @@
       delete overrides[subjectId];
     }
     saveSubjectNameOverrides(overrides);
+    return "ok";
+  }
+
+  // ---------- Custom group labels & year tags (Pre-Clinical / Para-Clinical / Clinical) ----------
+  const GROUP_LABELS_KEY = "rounds_group_labels_v1";
+
+  function loadGroupLabelOverrides() {
+    try {
+      const raw = localStorage.getItem(GROUP_LABELS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      console.error("Failed to load group label overrides", e);
+      return {};
+    }
+  }
+
+  function saveGroupLabelOverrides(overrides) {
+    try {
+      localStorage.setItem(GROUP_LABELS_KEY, JSON.stringify(overrides));
+    } catch (e) {
+      console.error("Failed to save group label overrides", e);
+    }
+  }
+
+  // Returns the current display label/tag for a group's internal key,
+  // falling back to the default if no override is saved.
+  function getGroupLabel(groupKey) {
+    const overrides = loadGroupLabelOverrides();
+    return (overrides[groupKey] && overrides[groupKey].label) || GROUP_DEFAULT_LABELS[groupKey];
+  }
+
+  function getGroupTag(groupKey) {
+    const overrides = loadGroupLabelOverrides();
+    return (overrides[groupKey] && overrides[groupKey].tag) || GROUP_DEFAULT_TAGS[groupKey];
+  }
+
+  function renameGroupLabel(groupKey, newLabel) {
+    const overrides = loadGroupLabelOverrides();
+    if (!overrides[groupKey]) overrides[groupKey] = {};
+    const trimmed = (newLabel || "").trim();
+    if (trimmed) {
+      overrides[groupKey].label = trimmed;
+    } else {
+      delete overrides[groupKey].label;
+      if (!overrides[groupKey].tag) delete overrides[groupKey];
+    }
+    saveGroupLabelOverrides(overrides);
+  }
+
+  function renameGroupTag(groupKey, newTag) {
+    const overrides = loadGroupLabelOverrides();
+    if (!overrides[groupKey]) overrides[groupKey] = {};
+    const trimmed = (newTag || "").trim();
+    if (trimmed) {
+      overrides[groupKey].tag = trimmed;
+    } else {
+      delete overrides[groupKey].tag;
+      if (!overrides[groupKey].label) delete overrides[groupKey];
+    }
+    saveGroupLabelOverrides(overrides);
   }
 
   // ---------- Chapter data persistence ----------
@@ -2143,10 +4450,47 @@
   function showToast(msg) {
     const toast = document.getElementById("toast");
     const text = document.getElementById("toast-text");
+    const undoBtn = document.getElementById("toast-undo-btn");
     text.textContent = msg;
+    undoBtn.style.display = "none";
     toast.classList.add("visible");
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => toast.classList.remove("visible"), 1400);
+  }
+
+  // Same toast, but with a visible "Undo" button that runs restoreFn when
+  // clicked. Used for delete actions (chapters, daily entries, subjects)
+  // so a slip of the finger isn't permanent. The window is intentionally
+  // longer than a plain confirmation toast since undoing takes a moment
+  // to notice and act on.
+  function showUndoToast(msg, restoreFn) {
+    const toast = document.getElementById("toast");
+    const text = document.getElementById("toast-text");
+    const undoBtn = document.getElementById("toast-undo-btn");
+
+    text.textContent = msg;
+    undoBtn.style.display = "inline-block";
+    toast.classList.add("visible");
+
+    clearTimeout(showToast._t);
+    clearTimeout(showUndoToast._t);
+
+    let used = false;
+    const cleanup = () => {
+      toast.classList.remove("visible");
+      undoBtn.style.display = "none";
+      undoBtn.onclick = null;
+    };
+
+    undoBtn.onclick = () => {
+      if (used) return;
+      used = true;
+      clearTimeout(showUndoToast._t);
+      restoreFn();
+      cleanup();
+    };
+
+    showUndoToast._t = setTimeout(cleanup, 6000);
   }
 
   function escapeHtml(str) {
@@ -2171,6 +4515,7 @@
 
   const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DOW_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const DOW_FULL_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   // ---------- View switching ----------
   let backAction = null; // function to call on back button; null = goHome
@@ -2182,13 +4527,14 @@
     document.getElementById("view-revision-due").classList.toggle("hidden", view !== "revision-due");
     document.getElementById("view-revision-backlog").classList.toggle("hidden", view !== "revision-backlog");
     document.getElementById("view-day").classList.toggle("hidden", view !== "day");
+    document.getElementById("view-activity-feed").classList.toggle("hidden", view !== "activity-feed");
     document.getElementById("breadcrumb").classList.toggle("visible", view !== "subjects");
   }
 
   function goHome() {
     backAction = null;
     showView("subjects");
-    document.getElementById("header-subtitle").textContent = "Select a subject to open its chapter tracker, or a date to log that day's target.";
+    document.getElementById("header-subtitle").textContent = "";
     renderSubjectList();
     renderCalendar();
     updateRevisionOverviewBadges();
@@ -2208,12 +4554,59 @@
 
       const groupHeader = document.createElement("div");
       groupHeader.className = "group-header";
+      const groupLabel = getGroupLabel(grp);
+      const groupTag = getGroupTag(grp);
       groupHeader.innerHTML = `
         <span class="dot-marker" style="background:${meta.tint}"></span>
-        <h2>${grp}</h2>
-        <span class="group-tag">${meta.tag}</span>
+        <h2><span class="editable-text group-label-text" contenteditable="false" spellcheck="false" data-group-key="${grp}">${groupLabel}</span></h2>
+        <button class="inline-edit-btn group-edit-btn" data-edit-target="label" title="Rename group" aria-label="Rename group">&#9998;</button>
+        <span class="group-tag editable-text" contenteditable="false" spellcheck="false" data-group-key="${grp}">${groupTag}</span>
+        <button class="inline-edit-btn group-edit-btn" data-edit-target="tag" title="Edit year" aria-label="Edit year">&#9998;</button>
         <span class="rule"></span>
       `;
+
+      const labelEl = groupHeader.querySelector(".group-label-text");
+      const tagEl = groupHeader.querySelector(".group-tag");
+      const [labelEditBtn, tagEditBtn] = groupHeader.querySelectorAll(".group-edit-btn");
+
+      function commitLabel() {
+        labelEl.contentEditable = "false";
+        renameGroupLabel(grp, labelEl.textContent);
+        renderSubjectList();
+      }
+
+      function commitTag() {
+        tagEl.contentEditable = "false";
+        renameGroupTag(grp, tagEl.textContent);
+        renderSubjectList();
+      }
+
+      labelEditBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        labelEl.contentEditable = "true";
+        labelEl.focus();
+        document.execCommand("selectAll", false, null);
+      });
+
+      tagEditBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        tagEl.contentEditable = "true";
+        tagEl.focus();
+        document.execCommand("selectAll", false, null);
+      });
+
+      labelEl.addEventListener("blur", commitLabel);
+      labelEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); labelEl.blur(); }
+        else if (e.key === "Escape") { labelEl.textContent = groupLabel; labelEl.blur(); }
+      });
+
+      tagEl.addEventListener("blur", commitTag);
+      tagEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); tagEl.blur(); }
+        else if (e.key === "Escape") { tagEl.textContent = groupTag; tagEl.blur(); }
+      });
+
       section.appendChild(groupHeader);
 
       const grid = document.createElement("div");
@@ -2229,6 +4622,14 @@
         const circumference = 2 * Math.PI * radius;
         const dashOffset = circumference * (1 - pct / 100);
 
+        // Same dual-layer glow technique as the date-strip's cyan text
+        // (a tight, brighter layer plus a soft, wider bloom) — but built
+        // from each subject's own tint color instead of a fixed cyan, so
+        // every ring glows in its own group's color.
+        const tintRgb = hexToRgb(meta.tint);
+        const glowTight = `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.65)`;
+        const glowSoft = `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.35)`;
+
         const tile = document.createElement("div");
         tile.className = "tile";
         tile.innerHTML = `
@@ -2237,6 +4638,7 @@
               <circle class="ring-track" cx="26" cy="26" r="${radius}"></circle>
               <circle class="ring-fill" cx="26" cy="26" r="${radius}"
                 stroke="${meta.tint}"
+                style="--ring-glow-tight:${glowTight};--ring-glow-soft:${glowSoft}"
                 stroke-dasharray="${circumference}"
                 stroke-dashoffset="${dashOffset}"></circle>
             </svg>
@@ -2246,25 +4648,151 @@
             <div class="tile-top">
               <div class="tile-name-group">
                 <span class="tile-name editable-text" contenteditable="false" spellcheck="false" data-subject-id="${s.id}">${s.name}</span>
-                <button class="inline-edit-btn tile-edit-btn" title="Rename subject" aria-label="Rename subject">&#9998;</button>
               </div>
               <span class="tile-pct" style="color:${meta.tint}">${s.w}%</span>
             </div>
             <div class="tile-meta">
-              <span class="tile-hint">click to open</span>
               <span class="tile-progress-label">${total ? `${done}/${total} revised` : "no chapters yet"}</span>
+            </div>
+          </div>
+          <div class="tile-context-menu" id="tile-context-${s.id}">
+            <button class="tile-context-item tile-context-rename">
+              <span>&#9998;</span> Rename
+            </button>
+            ${isRemovableSubject(s.id) ? `
+              <button class="tile-context-item tile-context-remove">
+                <span>&times;</span> Remove
+              </button>
+            ` : ""}
+          </div>
+          <div class="tile-confirm-remove">
+            <p class="tile-confirm-text">${s.custom
+              ? `Remove "${escapeHtml(s.name)}"? Chapters and progress will be deleted.`
+              : `Remove "${escapeHtml(s.name)}"? This is one of the 19 default subjects — it cannot be restored later. All its chapters and progress will be deleted.`
+            }</p>
+            <div class="tile-confirm-actions">
+              <button class="tile-confirm-cancel">Cancel</button>
+              <button class="tile-confirm-delete">Remove</button>
             </div>
           </div>
         `;
 
         const nameEl = tile.querySelector(".tile-name");
-        const editBtn = tile.querySelector(".tile-edit-btn");
+        const contextMenu = tile.querySelector(".tile-context-menu");
+        const confirmPanel = tile.querySelector(".tile-confirm-remove");
 
-        editBtn.addEventListener("click", (e) => {
+        function openContextMenu() {
+          document.querySelectorAll(".tile-context-menu.visible").forEach(m => {
+            if (m !== contextMenu) {
+              m.classList.remove("visible");
+              const otherTile = m.closest(".tile");
+              if (otherTile) otherTile.classList.remove("menu-open");
+            }
+          });
+          contextMenu.classList.add("visible");
+          tile.classList.add("menu-open");
+        }
+
+        function closeContextMenu() {
+          contextMenu.classList.remove("visible");
+          tile.classList.remove("menu-open");
+        }
+
+        function openConfirmRemove() {
+          closeContextMenu();
+          confirmPanel.classList.add("visible");
+          tile.classList.add("menu-open");
+        }
+
+        function closeConfirmRemove() {
+          confirmPanel.classList.remove("visible");
+          tile.classList.remove("menu-open");
+        }
+
+        // Long-press detection — works for touch and mouse alike. Native
+        // text selection / callout menus are suppressed via CSS
+        // (user-select: none) so a long-press reliably opens our menu
+        // instead of the browser's own text-selection gesture.
+        let pressTimer = null;
+        let longPressFired = false;
+        let pressStartPoint = null;
+        const MOVE_CANCEL_THRESHOLD = 10; // px — treat as a scroll/drag, not a hold
+
+        function startPress(e) {
+          if (e.target.closest(".tile-context-menu") || e.target.closest(".tile-confirm-remove")) return;
+          longPressFired = false;
+          pressStartPoint = { x: e.clientX, y: e.clientY };
+          pressTimer = setTimeout(() => {
+            longPressFired = true;
+            openContextMenu();
+          }, 550);
+        }
+
+        function movePress(e) {
+          if (!pressStartPoint) return;
+          const dx = Math.abs(e.clientX - pressStartPoint.x);
+          const dy = Math.abs(e.clientY - pressStartPoint.y);
+          if (dx > MOVE_CANCEL_THRESHOLD || dy > MOVE_CANCEL_THRESHOLD) {
+            clearTimeout(pressTimer);
+          }
+        }
+
+        function cancelPress() {
+          clearTimeout(pressTimer);
+          pressStartPoint = null;
+        }
+
+        tile.addEventListener("pointerdown", startPress);
+        tile.addEventListener("pointermove", movePress);
+        tile.addEventListener("pointerup", cancelPress);
+        tile.addEventListener("pointerleave", cancelPress);
+        tile.addEventListener("pointercancel", cancelPress);
+        tile.addEventListener("contextmenu", (e) => {
+          // Right-click (desktop) also opens the menu, and suppresses the
+          // browser's own right-click / long-press callout menu.
+          e.preventDefault();
+          openContextMenu();
+        });
+
+        contextMenu.querySelector(".tile-context-rename").addEventListener("click", (e) => {
           e.stopPropagation();
+          closeContextMenu();
           nameEl.contentEditable = "true";
           nameEl.focus();
           document.execCommand("selectAll", false, null);
+        });
+
+        const removeBtn = contextMenu.querySelector(".tile-context-remove");
+        if (removeBtn) {
+          removeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openConfirmRemove();
+          });
+        }
+
+        confirmPanel.querySelector(".tile-confirm-cancel").addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeConfirmRemove();
+        });
+
+        confirmPanel.querySelector(".tile-confirm-delete").addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeConfirmRemove();
+
+          const snapshot = {
+            subject: { ...s },
+            chapters: (DATA[s.id] || []).map(ch => ({ ...ch })),
+            nameOverride: loadSubjectNameOverrides()[s.id] || null,
+            wasCustom: !!s.custom,
+          };
+
+          removeSubjectEntirely(s.id);
+          logActivity("subject_removed", `${s.name} removed`);
+          renderSubjectList();
+          showUndoToast(`${s.name} removed`, () => {
+            restoreRemovedSubject(snapshot);
+            renderSubjectList();
+          });
         });
 
         nameEl.addEventListener("click", (e) => {
@@ -2273,7 +4801,12 @@
 
         nameEl.addEventListener("blur", () => {
           nameEl.contentEditable = "false";
-          renameSubject(s.id, nameEl.textContent);
+          const result = renameSubject(s.id, nameEl.textContent);
+          if (result === "duplicate") {
+            showToast(`A subject named "${nameEl.textContent.trim()}" already exists in ${getGroupLabel(grp)}`);
+            nameEl.textContent = s.name;
+            return;
+          }
           renderSubjectList();
         });
 
@@ -2288,15 +4821,258 @@
         });
 
         tile.addEventListener("click", (e) => {
-          if (e.target.closest(".inline-edit-btn")) return;
+          if (e.target.closest(".tile-context-menu")) return;
+          if (e.target.closest(".tile-confirm-remove")) return;
           if (nameEl.contentEditable === "true") return;
+          if (longPressFired) { longPressFired = false; return; }
           openSubject(s);
         });
         grid.appendChild(tile);
       });
 
+      // "+" tile — add a new subject to this year/group
+      const addTile = document.createElement("div");
+      addTile.className = "tile add-subject-tile";
+      addTile.innerHTML = `
+        <div class="add-subject-idle">
+          <span class="add-subject-plus">+</span>
+          <span class="add-subject-label">Add subject</span>
+        </div>
+        <div class="add-subject-form">
+          <div class="add-subject-form-row">
+            <input type="text" class="add-subject-input" placeholder="Subject name" autocomplete="off" />
+            <div class="add-subject-actions">
+              <button class="add-subject-confirm" title="Add subject" aria-label="Add subject">&#10003;</button>
+              <button class="add-subject-cancel" title="Cancel" aria-label="Cancel">&times;</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const idleView = addTile.querySelector(".add-subject-idle");
+      const formView = addTile.querySelector(".add-subject-form");
+      const input = addTile.querySelector(".add-subject-input");
+
+      function enterAddMode(e) {
+        if (e) e.stopPropagation();
+        addTile.classList.add("adding");
+        input.value = "";
+        clearDuplicateWarning();
+        input.focus();
+      }
+
+      function exitAddMode() {
+        addTile.classList.remove("adding");
+        clearDuplicateWarning();
+      }
+
+      function clearDuplicateWarning() {
+        addTile.classList.remove("has-duplicate-warning");
+        const warningEl = addTile.querySelector(".add-subject-warning");
+        if (warningEl) warningEl.remove();
+      }
+
+      function showDuplicateWarning(existingName) {
+        clearDuplicateWarning();
+        addTile.classList.add("has-duplicate-warning");
+        const warningEl = document.createElement("div");
+        warningEl.className = "add-subject-warning";
+        warningEl.textContent = `"${existingName}" already exists in ${getGroupLabel(grp)} — please choose a different name.`;
+        formView.appendChild(warningEl);
+        input.focus();
+      }
+
+      function isDuplicateInGroup(name) {
+        const normalized = name.trim().toLowerCase();
+        return SUBJECTS.find(s => s.grp === grp && s.name.trim().toLowerCase() === normalized);
+      }
+
+      function confirmAdd() {
+        const name = input.value.trim();
+        if (!name) { exitAddMode(); return; }
+
+        const duplicate = isDuplicateInGroup(name);
+        if (duplicate) {
+          showDuplicateWarning(duplicate.name);
+          return;
+        }
+
+        addCustomSubject(name, grp);
+        logActivity("subject_added", `${name} added to ${getGroupLabel(grp)}`);
+        renderSubjectList();
+        showToast(`${name} added to ${getGroupLabel(grp)}`);
+      }
+
+      addTile.addEventListener("click", (e) => {
+        if (!addTile.classList.contains("adding")) enterAddMode(e);
+      });
+
+      addTile.querySelector(".add-subject-confirm").addEventListener("click", (e) => {
+        e.stopPropagation();
+        confirmAdd();
+      });
+
+      addTile.querySelector(".add-subject-cancel").addEventListener("click", (e) => {
+        e.stopPropagation();
+        exitAddMode();
+      });
+
+      input.addEventListener("click", (e) => e.stopPropagation());
+      input.addEventListener("input", () => clearDuplicateWarning());
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); confirmAdd(); }
+        else if (e.key === "Escape") { e.preventDefault(); exitAddMode(); }
+      });
+
+      grid.appendChild(addTile);
+
       section.appendChild(grid);
       container.appendChild(section);
+    });
+  }
+
+  // "+ Add section" — a toggle icon in the header's toolbar row, beside
+  // Timer/Chapters Due/Revision Backlog/Settings. Clicking it opens a
+  // small popover to name a brand-new section (e.g. "Electives"); the
+  // created section behaves exactly like Pre-Clinical/Para-Clinical/
+  // Clinical — same subject grid, same "+ Add subject" tile, same
+  // rename/remove tools — since it's just another entry in
+  // GROUPS/GROUP_META once created. Registered once at startup rather
+  // than rebuilt on every renderSubjectList() call, since it now lives
+  // in the header rather than at the bottom of the subject list.
+  function initAddSectionControl() {
+    const toggleBtn = document.getElementById("add-section-toggle-btn");
+    const popover = document.getElementById("add-section-popover");
+    const input = document.getElementById("add-section-input");
+    const removeBlock = document.getElementById("remove-section-block");
+    const removeList = document.getElementById("remove-section-list");
+    const confirmPanel = document.getElementById("section-confirm-remove");
+    const confirmText = document.getElementById("section-confirm-text");
+
+    let pendingRemoveKey = null;
+
+    function openPopover() {
+      popover.classList.add("visible");
+      toggleBtn.setAttribute("aria-expanded", "true");
+      input.value = "";
+      confirmPanel.classList.remove("visible");
+      renderRemovableSectionsList();
+      input.focus();
+    }
+
+    function closePopover() {
+      popover.classList.remove("visible");
+      toggleBtn.setAttribute("aria-expanded", "false");
+      confirmPanel.classList.remove("visible");
+      pendingRemoveKey = null;
+    }
+
+    function isDuplicateGroupName(name) {
+      const normalized = name.trim().toLowerCase();
+      return GROUPS.some(g => getGroupLabel(g).trim().toLowerCase() === normalized);
+    }
+
+    function confirmCreate() {
+      const name = input.value.trim();
+      if (!name) { closePopover(); return; }
+      if (isDuplicateGroupName(name)) {
+        showToast(`A section named "${name}" already exists`);
+        return;
+      }
+      addCustomGroup(name);
+      logActivity("section_added", `"${name}" section created`);
+      renderSubjectList();
+      closePopover();
+      showToast(`"${name}" section added`);
+    }
+
+    // Lists every removable (i.e. user-created) section with its own
+    // small delete icon, so a specific one can be picked and removed —
+    // built-in sections (Pre-Clinical/Para-Clinical/Clinical) never show
+    // up here since isRemovableGroup() excludes them.
+    function renderRemovableSectionsList() {
+      const removableGroups = GROUPS.filter(g => isRemovableGroup(g));
+      removeList.innerHTML = "";
+
+      if (removableGroups.length === 0) {
+        removeBlock.style.display = "none";
+        return;
+      }
+
+      removeBlock.style.display = "block";
+      removableGroups.forEach(g => {
+        const row = document.createElement("div");
+        row.className = "remove-section-row";
+        row.innerHTML = `
+          <span class="remove-section-name">${escapeHtml(getGroupLabel(g))}</span>
+          <button class="remove-section-btn" data-group-key="${g}" title="Remove this section" aria-label="Remove this section">&times;</button>
+        `;
+        removeList.appendChild(row);
+      });
+    }
+
+    function askRemoveSection(groupKey) {
+      const subjectCount = SUBJECTS.filter(s => s.grp === groupKey).length;
+      if (subjectCount > 0) {
+        showToast(`Move or remove all subjects in "${getGroupLabel(groupKey)}" before deleting this section`);
+        return;
+      }
+      pendingRemoveKey = groupKey;
+      confirmText.textContent = `Remove "${getGroupLabel(groupKey)}"? This can't be undone.`;
+      confirmPanel.classList.add("visible");
+    }
+
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popover.classList.contains("visible")) closePopover();
+      else openPopover();
+    });
+
+    document.getElementById("add-section-confirm-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      confirmCreate();
+    });
+
+    document.getElementById("add-section-cancel-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      closePopover();
+    });
+
+    removeList.addEventListener("click", (e) => {
+      const btn = e.target.closest(".remove-section-btn");
+      if (!btn) return;
+      e.stopPropagation();
+      askRemoveSection(btn.getAttribute("data-group-key"));
+    });
+
+    document.getElementById("section-confirm-cancel-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      confirmPanel.classList.remove("visible");
+      pendingRemoveKey = null;
+    });
+
+    document.getElementById("section-confirm-delete-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!pendingRemoveKey) return;
+      const removedLabel = getGroupLabel(pendingRemoveKey);
+      removeCustomGroup(pendingRemoveKey);
+      logActivity("section_removed", `"${removedLabel}" section removed`);
+      pendingRemoveKey = null;
+      confirmPanel.classList.remove("visible");
+      renderSubjectList();
+      renderRemovableSectionsList();
+      showToast(`"${removedLabel}" section removed`);
+    });
+
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); confirmCreate(); }
+      else if (e.key === "Escape") { e.preventDefault(); closePopover(); }
+    });
+
+    document.addEventListener("click", (e) => {
+      const wrap = toggleBtn.closest(".color-picker-wrap");
+      if (!wrap.contains(e.target)) closePopover();
     });
   }
 
@@ -2352,6 +5128,7 @@
     document.getElementById("add-chapter-btn").addEventListener("click", () => {
       chapters.push({ id: uid(), name: "", mcq: "", pyq: "", lectureDate: "", revision: "none" });
       persist();
+      logActivity("chapter_added", `${subject.name} → new chapter added`);
       renderChapterView(subject);
       requestAnimationFrame(() => {
         const rows = document.querySelectorAll("#chapter-tbody tr");
@@ -2423,6 +5200,12 @@
           persist();
           updateSubjectStats(chapters);
 
+          if (field === "revision" && prevValue !== el.value) {
+            const chapterName = ch.name || "Untitled chapter";
+            const statusLabel = el.value === "done" ? "marked revised" : el.value === "progress" ? "marked in progress" : "reset to not started";
+            logActivity("chapter_revision", `${subject.name} → ${chapterName} ${statusLabel}`);
+          }
+
           if (field === "revision" && prevValue !== "done" && el.value === "done") {
             celebrateRevised(tr, el.closest(".revision-cell-wrap"));
           }
@@ -2431,10 +5214,18 @@
 
       tr.querySelector(".del-btn").addEventListener("click", () => {
         const idx = chapters.findIndex(c => c.id === ch.id);
-        if (idx > -1) chapters.splice(idx, 1);
+        if (idx === -1) return;
+        const removedChapter = chapters[idx];
+        const removedIndex = idx;
+        chapters.splice(idx, 1);
         persist();
+        logActivity("chapter_removed", `${subject.name} → ${removedChapter.name || "Untitled chapter"} removed`);
         renderChapterView(subject);
-        showToast("Chapter removed");
+        showUndoToast("Chapter removed", () => {
+          chapters.splice(removedIndex, 0, removedChapter);
+          persist();
+          renderChapterView(subject);
+        });
       });
 
       tbody.appendChild(tr);
@@ -2765,7 +5556,115 @@
     });
   }
 
-  // ---------- Revision Backlog (own dashboard, cross-subject) ----------
+  // ---------- Activity feed ----------
+  // Displays the real, timestamped event log built by logActivity() calls
+  // scattered throughout the app — grouped by day (Today / Yesterday /
+  // an actual date), newest first within each group.
+  const ACTIVITY_TYPE_ICONS = {
+    chapter_revision: "&#10003;",
+    chapter_added: "&#43;",
+    chapter_removed: "&times;",
+    subject_added: "&#43;",
+    subject_removed: "&times;",
+    section_added: "&#43;",
+    section_removed: "&times;",
+    daily_target_completed: "&#9733;",
+    exam_date_changed: "&#128197;",
+  };
+
+  const ACTIVITY_TYPE_COLORS = {
+    chapter_revision: "#2d6a4f",
+    chapter_added: "#3d5a80",
+    chapter_removed: "#8b2e3f",
+    subject_added: "#3d5a80",
+    subject_removed: "#8b2e3f",
+    section_added: "#3d5a80",
+    section_removed: "#8b2e3f",
+    daily_target_completed: "#9c6b1f",
+    exam_date_changed: "#1f7a4d",
+  };
+
+  function openActivityFeedDashboard() {
+    backAction = null;
+    showView("activity-feed");
+    document.getElementById("header-subtitle").textContent = "A running log of changes across your dashboard — chapters, subjects, sections, and daily targets, newest first.";
+    renderActivityFeedPage();
+  }
+
+  // Groups entries into "Today", "Yesterday", or a formatted date label,
+  // preserving the newest-first order the log is already stored in.
+  function groupActivityByDay(entries) {
+    const groups = [];
+    let currentLabel = null;
+    let currentGroup = null;
+
+    const todayStr = todayISO();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+    entries.forEach(entry => {
+      const entryDateStr = entry.timestamp.slice(0, 10);
+      let label;
+      if (entryDateStr === todayStr) label = "Today";
+      else if (entryDateStr === yesterdayStr) label = "Yesterday";
+      else {
+        const d = new Date(entry.timestamp);
+        label = `${DOW_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
+      }
+
+      if (label !== currentLabel) {
+        currentLabel = label;
+        currentGroup = { label, items: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.items.push(entry);
+    });
+
+    return groups;
+  }
+
+  function renderActivityFeedPage() {
+    const container = document.getElementById("view-activity-feed");
+    container.innerHTML = `
+      <div class="subject-title-row">
+        <div class="subject-title">Activity Feed</div>
+      </div>
+      <p class="daily-sub">Automatically generated from your own actions — nothing here needs to be filled in manually.</p>
+
+      <div class="activity-feed-list" id="activity-feed-list"></div>
+    `;
+
+    renderActivityFeedList();
+  }
+
+  function renderActivityFeedList() {
+    const listEl = document.getElementById("activity-feed-list");
+    if (!listEl) return;
+
+    const entries = loadActivityLog();
+
+    if (entries.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">Nothing logged yet. As you mark chapters revised, add subjects, or complete daily targets, they'll show up here automatically.</div>`;
+      return;
+    }
+
+    const groups = groupActivityByDay(entries);
+
+    listEl.innerHTML = groups.map(group => `
+      <div class="activity-day-group">
+        <div class="activity-day-label">${group.label.toUpperCase()}</div>
+        ${group.items.map(item => `
+          <div class="activity-row">
+            <span class="activity-row-icon" style="background:${ACTIVITY_TYPE_COLORS[item.type] || "#6b6558"}22; color:${ACTIVITY_TYPE_COLORS[item.type] || "#6b6558"}">${ACTIVITY_TYPE_ICONS[item.type] || "&bull;"}</span>
+            <span class="activity-row-text">${escapeHtml(item.text)}</span>
+            <span class="activity-row-time">${formatRelativeTime(item.timestamp)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `).join("");
+  }
+
   // Same source and same "not done" filter as Chapters Due for Revision,
   // but scanning every stage whose date has already passed rather than
   // just the one currently selected date.
@@ -2932,10 +5831,6 @@
     dowRow.innerHTML = DOW_NAMES.map(d => `<div class="cal-dow">${d}</div>`).join("");
 
     document.getElementById("cal-month-label").textContent = `${MONTH_NAMES[calViewMonth]} ${calViewYear}`;
-
-    // Keep the header date-strip in sync with whatever month the calendar is showing
-    const syncEl = document.getElementById("calendar-sync-display");
-    if (syncEl) syncEl.textContent = `${MONTH_NAMES[calViewMonth]} ${calViewYear}`;
 
     const weeksContainer = document.getElementById("cal-weeks");
     weeksContainer.innerHTML = "";
@@ -3160,8 +6055,17 @@
         const evt = el.tagName === "SELECT" ? "change" : (el.type === "checkbox" ? "change" : "input");
         el.addEventListener(evt, () => {
           const field = el.getAttribute("data-field");
+          const wasFullyDone = entry.mcqDone && entry.lectureDone && entry.revisionDone;
           entry[field] = el.type === "checkbox" ? el.checked : el.value;
           persistDaily();
+
+          const isFullyDone = entry.mcqDone && entry.lectureDone && entry.revisionDone;
+          if (el.type === "checkbox" && !wasFullyDone && isFullyDone) {
+            const subj = subjectById(entry.subjectId);
+            const subjName = subj ? subj.name : "Untitled subject";
+            logActivity("daily_target_completed", `Daily target completed: ${subjName} (${formatDateShort(dateStr)})`);
+          }
+
           if (el.type === "checkbox") {
             renderDayView(dateStr);
           } else {
@@ -3172,10 +6076,17 @@
 
       tr.querySelector(".del-btn").addEventListener("click", () => {
         const idx = entries.findIndex(e => e.id === entry.id);
-        if (idx > -1) entries.splice(idx, 1);
+        if (idx === -1) return;
+        const removedEntry = entries[idx];
+        const removedIndex = idx;
+        entries.splice(idx, 1);
         persistDaily();
         renderDayView(dateStr);
-        showToast("Entry removed");
+        showUndoToast("Entry removed", () => {
+          entries.splice(removedIndex, 0, removedEntry);
+          persistDaily();
+          renderDayView(dateStr);
+        });
       });
 
       tbody.appendChild(tr);
@@ -3232,6 +6143,28 @@
     }
   }
 
+  // Keeps the visible exam-date text (our own styled span) in sync with
+  // the real, invisible <input type="date"> underneath it — needed
+  // because iOS renders native date-input text in a way that can't be
+  // reliably constrained with plain CSS width/box-sizing, so we display
+  // our own formatted text instead and only use the native input for the
+  // actual picking interaction.
+  function updateExamDateDisplay() {
+    const examInput = document.getElementById("exam-date-input");
+    const displayEl = document.getElementById("exam-date-display-text");
+    if (!examInput || !displayEl) return;
+
+    if (!examInput.value) {
+      displayEl.textContent = "Not set";
+      return;
+    }
+
+    // examInput.value is always "YYYY-MM-DD" for a date input.
+    const [year, month, day] = examInput.value.split("-").map(Number);
+    const d = new Date(year, month - 1, day);
+    displayEl.textContent = `${day} ${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${year}`;
+  }
+
   function updateCountdown() {
     const examInput = document.getElementById("exam-date-input");
     const countdownEl = document.getElementById("countdown-display");
@@ -3253,35 +6186,131 @@
   }
 
   function initDateStrip() {
-    document.getElementById("today-display").textContent = formatDateShort(todayISO());
+    renderWeekStrip();
 
     const examInput = document.getElementById("exam-date-input");
     const saved = loadExamDate();
     if (saved) {
       examInput.value = saved;
     }
+    updateExamDateDisplay();
 
     examInput.addEventListener("change", () => {
       const val = examInput.value;
       const ok = saveExamDate(val);
       if (ok) {
         showToast(val ? "Exam date saved" : "Exam date cleared");
+        if (val) {
+          const [y, m, d] = val.split("-").map(Number);
+          const readable = `${d} ${MONTH_NAMES[m - 1].slice(0, 3)} ${y}`;
+          logActivity("exam_date_changed", `Exam date set to ${readable}`);
+        }
       } else {
         showToast("Save failed — storage may be full");
       }
+      updateExamDateDisplay();
       updateCountdown();
     });
 
     updateCountdown();
+  }
 
-    // clicking "Today" jumps the calendar below to the current month
-    const todayEl = document.getElementById("today-display");
-    todayEl.style.cursor = "pointer";
-    todayEl.title = "Jump calendar to this month";
-    todayEl.addEventListener("click", () => {
-      initCalendarState();
-      renderCalendar();
-    });
+  // Builds the "Sat, 16 2025 ... JUL" header line, plus the row of 7 day
+  // cells centered on today with today's own cell highlighted — driven
+  // entirely by real Date math, so it's always correct regardless of
+  // what day the app happens to be opened on. Clicking today's cell
+  // jumps the calendar below to the current month.
+  function renderWeekStrip() {
+    const today = new Date();
+
+    document.getElementById("week-strip-dow").textContent = DOW_FULL_NAMES[today.getDay()] + ",";
+    document.getElementById("week-strip-year").textContent = `${today.getDate()} ${today.getFullYear()}`;
+    document.getElementById("week-strip-month").textContent = MONTH_NAMES[today.getMonth()].slice(0, 3).toUpperCase();
+
+    const row = document.getElementById("week-strip-row");
+    row.innerHTML = "";
+
+    // Center the strip on today: 3 days before, today, 3 days after.
+    for (let offset = -3; offset <= 3; offset++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + offset);
+      const isToday = offset === 0;
+
+      const cell = document.createElement(isToday ? "button" : "div");
+      cell.className = "week-strip-cell" + (isToday ? " is-today" : "");
+      cell.innerHTML = `
+        <span class="week-strip-cell-dow">${DOW_NAMES[d.getDay()]}</span>
+        <span class="week-strip-cell-num">${d.getDate()}</span>
+      `;
+      if (isToday) {
+        cell.title = "Jump calendar to this month";
+        cell.addEventListener("click", () => {
+          initCalendarState();
+          renderCalendar();
+        });
+      }
+      row.appendChild(cell);
+    }
+  }
+
+  // ---------- Device identity (for cross-device sync labeling) ----------
+  // Guesses a friendly device name from the browser's own user-agent
+  // string, generated once and stored locally so it stays stable on this
+  // device across sessions. This is a client-side guess, not something
+  // Apple/Google hand apps directly — it won't match a device's actual
+  // given name (like "Sushant's iPhone"), just its general type.
+  const DEVICE_NAME_KEY = "rounds_device_name_v1";
+
+  function guessDeviceName() {
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "iPad";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/Android/.test(ua)) {
+      return /Mobile/.test(ua) ? "Android phone" : "Android tablet";
+    }
+    if (/Macintosh|Mac OS X/.test(ua)) return "Mac";
+    if (/Windows/.test(ua)) return "Windows PC";
+    if (/Linux/.test(ua)) return "Linux PC";
+    return "This device";
+  }
+
+  function getDeviceName() {
+    try {
+      let name = localStorage.getItem(DEVICE_NAME_KEY);
+      if (!name) {
+        name = guessDeviceName();
+        localStorage.setItem(DEVICE_NAME_KEY, name);
+      }
+      return name;
+    } catch (e) {
+      return guessDeviceName();
+    }
+  }
+
+  // ---------- Last-sync provenance ----------
+  // Separate from BACKUP_LAST_KEY (which only tracks this device's own
+  // last export/sync time) — this tracks the most recent sync file this
+  // device has actually IMPORTED, and who it came from, so "Last synced
+  // from iPhone · 2 hours ago" can be shown honestly after an import.
+  const SYNC_PROVENANCE_KEY = "rounds_sync_provenance_v1";
+
+  function saveSyncProvenance(deviceName, timestamp) {
+    try {
+      localStorage.setItem(SYNC_PROVENANCE_KEY, JSON.stringify({ deviceName, timestamp }));
+    } catch (e) {
+      console.error("Failed to save sync provenance", e);
+    }
+  }
+
+  function loadSyncProvenance() {
+    try {
+      const raw = localStorage.getItem(SYNC_PROVENANCE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   // ---------- Backup: export / import all app data as one JSON file ----------
@@ -3296,7 +6325,17 @@
     daily: "rounds_daily_targets_v2",
     examDate: "rounds_exam_date_v1",
     timerSettings: "rounds_timer_settings_v1",
+    timerVisible: "rounds_timer_visible_v1",
     profileInfo: "rounds_profile_info_v1",
+    subjectNames: "rounds_subject_names_v1",
+    tileColor: "rounds_tile_color_v1",
+    bgColor: "rounds_bg_color_v1",
+    headerLabels: "rounds_header_labels_v1",
+    groupLabels: "rounds_group_labels_v1",
+    customSubjects: "rounds_custom_subjects_v1",
+    removedBuiltinSubjects: "rounds_removed_builtin_subjects_v1",
+    customGroups: "rounds_custom_groups_v1",
+    activityLog: "rounds_activity_log_v1",
   };
 
   function buildBackupPayload() {
@@ -3309,6 +6348,7 @@
       app: "MBBS Dashboard",
       formatVersion: BACKUP_FORMAT_VERSION,
       exportedAt: new Date().toISOString(),
+      syncedFrom: getDeviceName(),
       data,
     };
   }
@@ -3362,9 +6402,12 @@
     DATA = loadData();
     DAILY = loadDaily();
 
+    renderActivityFeedList();
+
     const savedExam = loadExamDate();
     const examInput = document.getElementById("exam-date-input");
     if (examInput) examInput.value = savedExam || "";
+    updateExamDateDisplay();
     updateCountdown();
 
     const savedTimer = loadTimerSettings();
@@ -3397,6 +6440,33 @@
     if (emailInput) emailInput.value = savedProfile.email || "";
     updateOwnerBadge(savedProfile);
 
+    // Subject renames, custom subjects, custom sections, removed
+    // built-in subjects, tile color, background color, header
+    // title/exam name, and timer visibility all need to be re-applied
+    // too — without this, a restored backup would leave stale values on
+    // screen until a manual page reload, even though the underlying
+    // data was updated.
+    applyRemovedBuiltinFilter();
+    mergeCustomSubjects();
+    mergeCustomGroups();
+    applySubjectNameOverrides();
+
+    const savedTileColor = loadTileColor();
+    applyTileColor(savedTileColor);
+    renderColorSwatchGrid(savedTileColor);
+
+    const savedBgColor = loadBgColor();
+    applyBgColor(savedBgColor);
+    renderBgColorSwatchGrid(savedBgColor);
+
+    const savedLabels = loadHeaderLabels();
+    const titleEl = document.getElementById("main-title-text");
+    const exam1El = document.getElementById("exam-name-1-text");
+    if (titleEl) titleEl.textContent = savedLabels.title || "MBBS Dashboard";
+    if (exam1El) exam1El.textContent = savedLabels.exam1 || "INI-CET";
+
+    setTimerVisible(loadTimerVisible());
+
     goHome();
   }
 
@@ -3424,6 +6494,16 @@
 
       restoreBackupPayload(parsed);
       reloadAllStateFromStorage();
+
+      // Record where this imported data actually came from, so this
+      // device can honestly show "Last synced from iPhone · [time]"
+      // afterward — using the source device's own claimed name and
+      // export timestamp, not this device's.
+      const sourceDevice = parsed.syncedFrom || "another device";
+      const sourceTimestamp = parsed.exportedAt || new Date().toISOString();
+      saveSyncProvenance(sourceDevice, sourceTimestamp);
+      renderSyncProvenanceDisplay();
+
       showToast("Backup restored");
     };
     reader.onerror = () => showToast("Couldn't read that file");
@@ -3462,6 +6542,163 @@
     fileInput.addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
       if (file) importBackupFromFile(file);
+    });
+  }
+
+  // ---------- Sync: keep one backup file up to date on demand ----------
+  // Uses the File System Access API where supported (Chrome, Edge, and
+  // other Chromium browsers) so the user picks a real file once and every
+  // "Sync now" click overwrites that exact same file — the browser's own
+  // save dialog is what shows the real path, since a webpage is never
+  // allowed to know or choose a file path on its own for security reasons.
+  // Falls back to a normal re-download (with the OS "Save As" dialog, which
+  // also shows the destination) on browsers without that API — Safari/iOS
+  // included.
+  const SYNC_LAST_KEY = "rounds_sync_last_v1";
+  const SYNC_FILENAME_KEY = "rounds_sync_filename_v1";
+  let syncFileHandle = null; // only lives for this page session
+
+  function loadSyncMeta() {
+    try {
+      return {
+        last: localStorage.getItem(SYNC_LAST_KEY),
+        filename: localStorage.getItem(SYNC_FILENAME_KEY),
+      };
+    } catch (e) {
+      return { last: null, filename: null };
+    }
+  }
+
+  function saveSyncMeta(filename) {
+    try {
+      localStorage.setItem(SYNC_LAST_KEY, new Date().toISOString());
+      if (filename) localStorage.setItem(SYNC_FILENAME_KEY, filename);
+    } catch (e) {
+      console.error("Failed to save sync metadata", e);
+    }
+  }
+
+  function renderSyncStatus() {
+    const el = document.getElementById("backup-sync-status");
+    if (!el) return;
+    const meta = loadSyncMeta();
+
+    if (!meta.last) {
+      el.textContent = "Not synced yet";
+      el.classList.remove("synced");
+      return;
+    }
+
+    const d = new Date(meta.last);
+    const dow = DOW_NAMES[d.getDay()];
+    const month = MONTH_NAMES[d.getMonth()];
+    const time = `${dow}, ${month} ${d.getDate()} · ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+    if (syncFileHandle && meta.filename) {
+      el.textContent = `Synced to "${meta.filename}" — ${time}`;
+    } else if (meta.filename) {
+      el.textContent = `Last synced: ${time} (re-pick "${meta.filename}" to overwrite it again, or check your Downloads folder)`;
+    } else {
+      el.textContent = `Last synced: ${time} — check your browser's Downloads folder`;
+    }
+    el.classList.add("synced");
+  }
+
+  // "2 hours ago" / "3 days ago" style relative time — more honest for
+  // provenance display than an absolute date, since what matters here is
+  // roughly how stale the cross-device data is.
+  function formatRelativeTime(isoString) {
+    const then = new Date(isoString);
+    if (isNaN(then.getTime())) return "";
+    const diffMs = Date.now() - then.getTime();
+    const diffMin = Math.round(diffMs / 60000);
+
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
+    const diffHr = Math.round(diffMin / 60);
+    if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? "" : "s"} ago`;
+    const diffDay = Math.round(diffHr / 24);
+    if (diffDay < 30) return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
+    const dow = DOW_NAMES[then.getDay()];
+    const month = MONTH_NAMES[then.getMonth()];
+    return `${dow}, ${month} ${then.getDate()}`;
+  }
+
+  // Shows where the most recently IMPORTED sync file came from — separate
+  // from renderSyncStatus() above, which only tracks this device's own
+  // outgoing exports. This is the honest cross-device signal: it only
+  // updates when a file from another device is actually brought over and
+  // imported here, never in real time.
+  function renderSyncProvenanceDisplay() {
+    const el = document.getElementById("sync-provenance-status");
+    if (!el) return;
+    const provenance = loadSyncProvenance();
+
+    if (!provenance) {
+      el.textContent = "";
+      return;
+    }
+
+    const relative = formatRelativeTime(provenance.timestamp);
+    el.textContent = `Last synced from ${provenance.deviceName} · ${relative}`;
+  }
+
+  function renderDeviceNameNote() {
+    const el = document.getElementById("device-name-note");
+    if (!el) return;
+    el.textContent = `This device is labeled "${getDeviceName()}" in sync files.`;
+  }
+
+  async function syncBackupNow() {
+    const payload = buildBackupPayload();
+    const jsonText = JSON.stringify(payload, null, 2);
+    const suggestedName = `mbbs-dashboard-sync.json`;
+
+    // Preferred path: File System Access API — lets us write to the exact
+    // same file every time after the user picks it once this session.
+    if (window.showSaveFilePicker) {
+      try {
+        if (!syncFileHandle) {
+          syncFileHandle = await window.showSaveFilePicker({
+            suggestedName,
+            types: [{ description: "JSON backup", accept: { "application/json": [".json"] } }],
+          });
+        }
+        const writable = await syncFileHandle.createWritable();
+        await writable.write(jsonText);
+        await writable.close();
+
+        saveSyncMeta(syncFileHandle.name || suggestedName);
+        renderSyncStatus();
+        showToast(`Synced to "${syncFileHandle.name || suggestedName}"`);
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          // user cancelled the file picker — do nothing further
+          return;
+        }
+        console.error("File System Access sync failed, falling back to download", err);
+        syncFileHandle = null;
+        // fall through to the download fallback below
+      }
+    }
+
+    // Fallback: browsers without File System Access support (Safari/iOS).
+    // This downloads a fresh file each time via the browser's normal save
+    // flow — if "Ask where to save each file" is on, the OS dialog shows
+    // the real destination path.
+    downloadJSON(suggestedName, payload);
+    saveSyncMeta(suggestedName);
+    renderSyncStatus();
+    showToast("Synced — check your Downloads folder");
+  }
+
+  function initSyncButton() {
+    renderSyncStatus();
+    renderSyncProvenanceDisplay();
+    renderDeviceNameNote();
+    document.getElementById("sync-backup-btn").addEventListener("click", () => {
+      syncBackupNow();
     });
   }
 
@@ -3670,6 +6907,130 @@
     document.getElementById("open-revision-backlog-icon-btn").addEventListener("click", openRevisionBacklogDashboard);
   }
 
+  // ---------- Background color picker ----------
+  const BG_COLOR_KEY = "rounds_bg_color_v1";
+
+  const BG_COLOR_PRESETS = [
+    { id: "red", hex: "#ff3b30" },
+    { id: "blue", hex: "#0a7cff" },
+    { id: "green", hex: "#1fb60f" },
+    { id: "pink", hex: "#ff6f91" },
+    { id: "purple", hex: "#dcb3fa" },
+    { id: "gold", hex: "#f7cf6e" },
+    { id: "salmon", hex: "#ff8072" },
+    { id: "skyblue", hex: "#a6d8fb" },
+    { id: "black", hex: "#1c1c1a" },
+    { id: "magenta", hex: "#9c2ea0" },
+    { id: "grey", hex: "#dcdcda" },
+    { id: "default", hex: null }, // restores the original light background
+  ];
+
+  const BG_COLOR_DEFAULT = "#f4f5f7";
+
+  // The color picked in the swatch grid becomes the HEADER's base tone
+  // The color picked in the swatch grid becomes the HEADER's base tone.
+  // The page body is always derived to be LIGHTER than the header — the
+  // top of the page reads as the deeper, richer tone and the canvas
+  // below (where the subject tiles sit) is a visibly lighter version of
+  // the same color. This is a single, one-directional relationship (no
+  // light/dark branching) so it's impossible for the page to end up
+  // darker than the header, whatever color gets picked.
+  function derivePageShade(hex) {
+    return mix(hex, "#ffffff", 0.72);
+  }
+
+  function applyBgColor(hex) {
+    const root = document.documentElement;
+    const headerValue = hex || BG_COLOR_DEFAULT;
+    const pageValue = derivePageShade(headerValue);
+
+    root.style.setProperty("--bg-page", pageValue);
+    root.style.setProperty("--bg-page-header", headerValue);
+
+    // Setting background-color directly (not just the --bg-page custom
+    // property) guarantees a smooth animated fade in every browser, since
+    // custom-property changes alone aren't reliably interpolated without
+    // @property support — this is the real fix, not just the CSS transition.
+    document.body.style.backgroundColor = pageValue;
+    const headerEl = document.querySelector("header");
+    if (headerEl) headerEl.style.backgroundColor = headerValue;
+
+    // Pick readable text on very dark header colors (e.g. black) — the
+    // page body itself is always kept light by derivePageShade() above,
+    // so body text stays dark regardless; only the header's own contrast
+    // needs checking here for its icons/title.
+    const rgb = hexToRgb(headerValue);
+    const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+    document.body.style.color = "#1c1c1a";
+
+    const dot = document.getElementById("bg-color-dot");
+    if (dot) dot.style.background = headerValue;
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute("content", headerValue);
+  }
+
+  function loadBgColor() {
+    try {
+      return localStorage.getItem(BG_COLOR_KEY); // null if never set
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveBgColor(hex) {
+    try {
+      if (hex) localStorage.setItem(BG_COLOR_KEY, hex);
+      else localStorage.removeItem(BG_COLOR_KEY);
+    } catch (e) {
+      console.error("Failed to save background color", e);
+    }
+  }
+
+  function renderBgColorSwatchGrid(selectedHex) {
+    const grid = document.getElementById("bg-color-swatch-grid");
+    grid.innerHTML = "";
+
+    BG_COLOR_PRESETS.forEach((preset) => {
+      const btn = document.createElement("button");
+      btn.className = "color-swatch-option";
+      btn.title = preset.id === "default" ? "Default" : preset.id;
+      btn.style.background = preset.hex || BG_COLOR_DEFAULT;
+      btn.style.color = preset.hex || "#8a8b8d";
+      if (preset.hex === selectedHex || (preset.hex === null && !selectedHex)) {
+        btn.classList.add("selected");
+      }
+      btn.addEventListener("click", () => {
+        applyBgColor(preset.hex);
+        saveBgColor(preset.hex);
+        renderBgColorSwatchGrid(preset.hex);
+      });
+      grid.appendChild(btn);
+    });
+
+    // Custom color swatch ("+") using the native color input
+    const customBtn = document.createElement("button");
+    customBtn.className = "color-swatch-option custom-swatch";
+    customBtn.title = "Custom color";
+    customBtn.textContent = "+";
+    const customInput = document.createElement("input");
+    customInput.type = "color";
+    customInput.value = selectedHex || BG_COLOR_DEFAULT;
+    customInput.addEventListener("input", (e) => {
+      applyBgColor(e.target.value);
+      saveBgColor(e.target.value);
+      renderBgColorSwatchGrid(e.target.value);
+    });
+    customBtn.appendChild(customInput);
+    grid.appendChild(customBtn);
+  }
+
+  function initBgColorPicker() {
+    const saved = loadBgColor();
+    applyBgColor(saved);
+    renderBgColorSwatchGrid(saved);
+  }
+
   // ---------- Tile color picker ----------
   const TILE_COLOR_KEY = "rounds_tile_color_v1";
 
@@ -3821,22 +7182,408 @@
     const saved = loadTileColor();
     applyTileColor(saved);
     renderColorSwatchGrid(saved);
+  }
 
-    const btn = document.getElementById("tile-color-btn");
-    const popover = document.getElementById("color-picker-popover");
+  // ---------- Merged color menu (opens Tile color / Background color) ----------
+  // ---------- Radial hub menu ----------
+  // Replaces the flat row of 6 icons with one central hub button; opening
+  // it fans the same 6 controls (Timer, Chapters Due, Revision Backlog,
+  // Settings, Add section, Activity feed) out along an arc using CSS
+  // transforms, computed here rather than hardcoded so it still works
+  // cleanly if a satellite is ever added or removed later.
+  function initHubMenu() {
+    const wrap = document.getElementById("hub-wrap");
+    const hubBtn = document.getElementById("hub-toggle-btn");
+    const satellites = Array.from(document.querySelectorAll(".hub-satellite"));
 
-    btn.addEventListener("click", (e) => {
+    // Arc from upper-left to lower-left of the hub, fanning into the
+    // open space to the left of the icon within the header — the hub
+    // now sits at the far right of the header row, so a rightward or
+    // upward arc would push satellites off-screen or into the title
+    // above. Radius is in px, matching the icons' own 34px size plus a
+    // little breathing room between them. Shrinks on narrow (iPhone-
+    // width) screens so the fan stays comfortably inside the header
+    // card's own edge instead of crowding its rounded corner.
+    const RADIUS = window.innerWidth <= 480 ? 46 : 58;
+    const START_ANGLE = 70; // degrees, measured clockwise from 3 o'clock
+    const END_ANGLE = 200;
+
+    function layoutSatellites() {
+      const count = satellites.length;
+      satellites.forEach((sat, i) => {
+        const t = count === 1 ? 0 : i / (count - 1);
+        const angleDeg = START_ANGLE + (END_ANGLE - START_ANGLE) * t;
+        const angleRad = (angleDeg * Math.PI) / 180;
+        const sx = Math.cos(angleRad) * RADIUS;
+        const sy = Math.sin(angleRad) * RADIUS;
+        sat.style.setProperty("--sx", `${sx.toFixed(1)}px`);
+        sat.style.setProperty("--sy", `${sy.toFixed(1)}px`);
+        sat.style.transitionDelay = wrap.getAttribute("data-open") === "true" ? `${i * 25}ms` : "0ms";
+      });
+    }
+
+    function openHub() {
+      wrap.setAttribute("data-open", "true");
+      hubBtn.setAttribute("aria-expanded", "true");
+      layoutSatellites();
+    }
+
+    function closeHub() {
+      wrap.setAttribute("data-open", "false");
+      hubBtn.setAttribute("aria-expanded", "false");
+      // Collapse instantly (no stagger) so it doesn't look laggy on close.
+      satellites.forEach(sat => { sat.style.transitionDelay = "0ms"; });
+      // Also close any settings/add-section popover that might be open,
+      // so nothing is left floating once its trigger icon has retracted.
+      document.querySelectorAll(".color-picker-popover.visible").forEach(p => p.classList.remove("visible"));
+    }
+
+    hubBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const nowVisible = !popover.classList.contains("visible");
-      popover.classList.toggle("visible", nowVisible);
-      btn.setAttribute("aria-expanded", String(nowVisible));
+      if (wrap.getAttribute("data-open") === "true") closeHub();
+      else openHub();
     });
 
     document.addEventListener("click", (e) => {
-      if (!popover.contains(e.target) && e.target !== btn) {
-        popover.classList.remove("visible");
-        btn.setAttribute("aria-expanded", "false");
+      if (!wrap.contains(e.target)) closeHub();
+    });
+
+    // Recompute the arc on resize in case layout constraints change (e.g.
+    // rotating a phone) — cheap to redo since it's just trig, not a re-render.
+    window.addEventListener("resize", () => {
+      if (wrap.getAttribute("data-open") === "true") layoutSatellites();
+    });
+
+    layoutSatellites();
+  }
+
+  function initSettingsMenu() {
+    const menuBtn = document.getElementById("settings-menu-btn");
+    const menuPopover = document.getElementById("settings-menu-popover");
+    const tilePopover = document.getElementById("color-picker-popover");
+    const bgPopover = document.getElementById("bg-color-popover");
+    const profilePopover = document.getElementById("profile-popover");
+    const backupPopover = document.getElementById("backup-popover");
+    const applockPopover = document.getElementById("applock-popover");
+
+    const allPopovers = [menuPopover, tilePopover, bgPopover, profilePopover, backupPopover, applockPopover];
+
+    function closeAll() {
+      allPopovers.forEach((p) => p.classList.remove("visible"));
+      menuBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function openOnly(popover) {
+      allPopovers.forEach((p) => {
+        p.classList.toggle("visible", p === popover);
+        p.style.left = "";
+        p.style.right = "";
+      });
+      menuBtn.setAttribute("aria-expanded", "true");
+      if (popover) clampPopoverToViewport(popover);
+    }
+
+    // Popovers are positioned with `right: 0` relative to their small
+    // trigger icon, which can push them past the left edge of the
+    // viewport on wider screens (iPad, desktop) where that icon isn't
+    // near the true page edge. This nudges the popover back on-screen
+    // after it renders, using its real measured position rather than
+    // guessing at a breakpoint.
+    function clampPopoverToViewport(popover) {
+      // Let the browser paint it first so getBoundingClientRect is accurate.
+      requestAnimationFrame(() => {
+        const rect = popover.getBoundingClientRect();
+        const margin = 12;
+        if (rect.left < margin) {
+          const overflow = margin - rect.left;
+          const currentRight = parseFloat(getComputedStyle(popover).right) || 0;
+          popover.style.left = "auto";
+          popover.style.right = `${currentRight - overflow}px`;
+        }
+      });
+    }
+
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isAnyOpen = allPopovers.some((p) => p.classList.contains("visible"));
+      if (isAnyOpen) {
+        closeAll();
+      } else {
+        openOnly(menuPopover);
       }
+    });
+
+    document.getElementById("open-tile-color-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(tilePopover);
+    });
+
+    document.getElementById("open-bg-color-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(bgPopover);
+    });
+
+    document.getElementById("open-profile-panel-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(profilePopover);
+      const nameInput = document.getElementById("profile-name-input");
+      if (nameInput) nameInput.focus();
+    });
+
+    document.getElementById("open-backup-panel-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(backupPopover);
+      renderSyncProvenanceDisplay();
+      renderDeviceNameNote();
+    });
+
+    document.getElementById("open-app-lock-panel-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(applockPopover);
+      renderAppLockSettingsPanel();
+    });
+
+    document.getElementById("tile-color-back-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(menuPopover);
+    });
+
+    document.getElementById("bg-color-back-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(menuPopover);
+    });
+
+    document.getElementById("profile-back-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(menuPopover);
+    });
+
+    document.getElementById("backup-back-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(menuPopover);
+    });
+
+    document.getElementById("applock-back-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOnly(menuPopover);
+    });
+
+    document.addEventListener("click", (e) => {
+      const wrap = menuBtn.closest(".color-picker-wrap");
+      if (!wrap.contains(e.target)) {
+        closeAll();
+      }
+    });
+  }
+
+  // ---------- App lock (local PIN) ----------
+  // Honest scope: this only stops someone from casually opening the app on
+  // an unlocked phone. The PIN is hashed (SHA-256 via Web Crypto) before
+  // being stored, so it isn't sitting in localStorage as plain text — but
+  // this is not real encryption of the underlying data, and anyone with
+  // direct access to the device's browser storage could still read the
+  // dashboard's data directly. The device's own passcode/Face ID remains
+  // the actual security boundary; this is a light deterrent on top of it.
+  const APPLOCK_HASH_KEY = "rounds_applock_hash_v1";
+  let lockEntry = "";
+  let lockMode = "unlock"; // "unlock" | "set-new" | "confirm-new"
+  let pendingNewPin = "";
+  let lockShakeTimer = null;
+
+  async function sha256Hex(text) {
+    const enc = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", enc);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function loadPinHash() {
+    try {
+      return localStorage.getItem(APPLOCK_HASH_KEY);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function savePinHash(hash) {
+    try {
+      if (hash) localStorage.setItem(APPLOCK_HASH_KEY, hash);
+      else localStorage.removeItem(APPLOCK_HASH_KEY);
+    } catch (e) {
+      console.error("Failed to save app lock PIN", e);
+    }
+  }
+
+  function renderLockDots() {
+    const dotsEl = document.getElementById("lock-dots");
+    dotsEl.innerHTML = "";
+    const length = Math.max(lockEntry.length, 4);
+    for (let i = 0; i < Math.max(length, 4); i++) {
+      const dot = document.createElement("span");
+      dot.className = "lock-dot" + (i < lockEntry.length ? " filled" : "");
+      dotsEl.appendChild(dot);
+    }
+  }
+
+  function setLockError(msg) {
+    document.getElementById("lock-error").textContent = msg || "";
+  }
+
+  function shakeLock() {
+    const overlay = document.getElementById("lock-overlay");
+    overlay.classList.remove("shake");
+    void overlay.offsetWidth;
+    overlay.classList.add("shake");
+    clearTimeout(lockShakeTimer);
+    lockShakeTimer = setTimeout(() => overlay.classList.remove("shake"), 400);
+  }
+
+  function updateLockPrompt() {
+    const titleEl = document.getElementById("lock-title");
+    const subEl = document.getElementById("lock-sub");
+    if (lockMode === "set-new") {
+      titleEl.textContent = "Set a PIN";
+      subEl.textContent = "Choose a 4–6 digit PIN";
+    } else if (lockMode === "confirm-new") {
+      titleEl.textContent = "Confirm PIN";
+      subEl.textContent = "Enter it again to confirm";
+    } else {
+      titleEl.textContent = "Enter PIN";
+      subEl.textContent = "Unlock your dashboard";
+    }
+  }
+
+  async function handleLockSubmit() {
+    const pin = lockEntry;
+
+    if (lockMode === "set-new") {
+      pendingNewPin = pin;
+      lockEntry = "";
+      lockMode = "confirm-new";
+      updateLockPrompt();
+      renderLockDots();
+      return;
+    }
+
+    if (lockMode === "confirm-new") {
+      if (pin !== pendingNewPin) {
+        setLockError("PINs didn't match — try again");
+        shakeLock();
+        lockEntry = "";
+        pendingNewPin = "";
+        lockMode = "set-new";
+        updateLockPrompt();
+        renderLockDots();
+        return;
+      }
+      const hash = await sha256Hex(pin);
+      savePinHash(hash);
+      hideLockOverlay();
+      showToast("PIN set");
+      return;
+    }
+
+    // lockMode === "unlock"
+    const storedHash = loadPinHash();
+    const enteredHash = await sha256Hex(pin);
+    if (enteredHash === storedHash) {
+      hideLockOverlay();
+    } else {
+      setLockError("Incorrect PIN");
+      shakeLock();
+      lockEntry = "";
+      renderLockDots();
+    }
+  }
+
+  function showLockOverlay(mode) {
+    lockMode = mode;
+    lockEntry = "";
+    pendingNewPin = "";
+    setLockError("");
+    updateLockPrompt();
+    renderLockDots();
+    document.getElementById("lock-overlay").classList.add("visible");
+    document.getElementById("lock-overlay").setAttribute("aria-hidden", "false");
+  }
+
+  function hideLockOverlay() {
+    document.getElementById("lock-overlay").classList.remove("visible");
+    document.getElementById("lock-overlay").setAttribute("aria-hidden", "true");
+    document.documentElement.removeAttribute("data-locked");
+  }
+
+  function initLockScreen() {
+    let autoSubmitTimer = null;
+
+    document.querySelectorAll(".lock-key[data-key]").forEach(key => {
+      key.addEventListener("click", () => {
+        if (lockEntry.length >= 6) return;
+        lockEntry += key.getAttribute("data-key");
+        setLockError("");
+        renderLockDots();
+
+        // Auto-submit shortly after reaching 4+ digits (standard PIN UX).
+        // Debounced so it resets on every keypress, giving room for 5-6
+        // digit PINs to finish typing before submitting.
+        clearTimeout(autoSubmitTimer);
+        if (lockEntry.length >= 4) {
+          autoSubmitTimer = setTimeout(() => {
+            if (lockEntry.length >= 4) handleLockSubmit();
+          }, 350);
+        }
+      });
+    });
+
+    document.getElementById("lock-backspace").addEventListener("click", () => {
+      clearTimeout(autoSubmitTimer);
+      lockEntry = lockEntry.slice(0, -1);
+      setLockError("");
+      renderLockDots();
+    });
+  }
+
+  // Called at startup: if a PIN is set, show the unlock screen before the
+  // dashboard is usable. If not, the app opens normally with no lock.
+  function checkLockOnStartup() {
+    const hash = loadPinHash();
+    if (hash) {
+      showLockOverlay("unlock");
+    } else {
+      // Safety fallback: if data-locked was set by the early script but no
+      // hash actually exists (shouldn't normally happen), don't leave the
+      // app permanently hidden — just reveal it.
+      document.documentElement.removeAttribute("data-locked");
+    }
+  }
+
+  function renderAppLockSettingsPanel() {
+    const hash = loadPinHash();
+    const descEl = document.getElementById("applock-status-desc");
+    const setBtn = document.getElementById("applock-set-btn");
+    const removeBtn = document.getElementById("applock-remove-btn");
+
+    if (hash) {
+      descEl.textContent = "PIN is set — this app is locked when opened.";
+      setBtn.textContent = "Change PIN";
+      removeBtn.style.display = "block";
+    } else {
+      descEl.textContent = "No PIN set — anyone who opens this app can see everything.";
+      setBtn.textContent = "Set a PIN";
+      removeBtn.style.display = "none";
+    }
+  }
+
+  function initAppLockSettings() {
+    document.getElementById("applock-set-btn").addEventListener("click", () => {
+      showLockOverlay("set-new");
+    });
+
+    document.getElementById("applock-remove-btn").addEventListener("click", () => {
+      const confirmed = window.confirm("Remove the PIN? The app will open without asking for it from now on.");
+      if (!confirmed) return;
+      savePinHash(null);
+      renderAppLockSettingsPanel();
+      showToast("PIN removed");
     });
   }
 
@@ -3907,24 +7654,6 @@
         saveProfileInfo(info);
         if (key === "name") updateOwnerBadge(info);
       });
-    });
-
-    const btn = document.getElementById("profile-info-btn");
-    const popover = document.getElementById("profile-popover");
-
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const nowVisible = !popover.classList.contains("visible");
-      popover.classList.toggle("visible", nowVisible);
-      btn.setAttribute("aria-expanded", String(nowVisible));
-      if (nowVisible) nameInput.focus();
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!popover.contains(e.target) && e.target !== btn) {
-        popover.classList.remove("visible");
-        btn.setAttribute("aria-expanded", "false");
-      }
     });
   }
 
@@ -4015,7 +7744,26 @@
   document.getElementById("back-btn").addEventListener("click", () => {
     if (backAction) { backAction(); } else { goHome(); }
   });
+
+  // Single, permanent outside-click closer for every subject tile's
+  // context menu / remove-confirm panel — registered once here rather
+  // than inside renderSubjectList(), so it never duplicates no matter
+  // how many times the subject grid re-renders.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".tile-context-menu") || e.target.closest(".tile-confirm-remove")) return;
+    document.querySelectorAll(".tile-context-menu.visible, .tile-confirm-remove.visible").forEach(el => {
+      el.classList.remove("visible");
+      const t = el.closest(".tile");
+      if (t) t.classList.remove("menu-open");
+    });
+  });
+
+  initLockScreen();
+  initAppLockSettings();
+  checkLockOnStartup();
+
   initCalendarState();
+  initBgColorPicker();
   applySubjectNameOverrides();
   initTileColorPicker();
   initProfileInfo();
@@ -4024,9 +7772,14 @@
   renderCalendar();
   initDateStrip();
   initBackupStrip();
+  initSyncButton();
+  initSettingsMenu();
+  initAddSectionControl();
+  initHubMenu();
   updateRevisionOverviewBadges();
   document.getElementById("open-revision-due-tile").addEventListener("click", openRevisionDueDashboard);
   document.getElementById("open-revision-backlog-tile").addEventListener("click", openRevisionBacklogDashboard);
+  document.getElementById("open-activity-feed-btn").addEventListener("click", openActivityFeedDashboard);
   initTimerWidget();
 
   // ---------- Service worker registration (offline support) ----------
