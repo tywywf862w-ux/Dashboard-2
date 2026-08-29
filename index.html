@@ -101,13 +101,17 @@
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: var(--bg-surface, #ffffff);
-    border: 1px solid var(--border-strong, #eaeef0);
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 10px;
-    box-shadow: 0 1px 2px rgba(20,37,29,0.06), 0 4px 12px rgba(20,37,29,0.06);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -4px 7px rgba(20,30,35,0.08) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 3px 8px rgba(30,40,45,0.16);
   }
 
   .lock-icon svg {
@@ -182,28 +186,40 @@
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    background: var(--bg-surface, #ffffff);
-    border: 1px solid var(--border-strong, #eaeef0);
-    color: var(--text-primary, #14251d);
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    color: var(--tile-text, #1a2229);
     font-family: 'IBM Plex Mono', monospace;
     font-size: 22px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(20,37,29,0.05);
-    transition: background 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -4px 7px rgba(20,30,35,0.08) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 3px 8px rgba(30,40,45,0.16);
+    transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.1s ease, filter 0.12s ease;
   }
 
   .lock-key:hover {
-    background: var(--bg-hover, #eef1f0);
+    transform: translateY(-1px);
+    filter: brightness(1.03);
   }
 
   .lock-key:active {
-    transform: scale(0.94);
+    transform: translateY(1px) scale(0.96);
+    filter: brightness(0.97);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 -2px 4px rgba(20,30,35,0.1) inset,
+      0 1px 0 var(--tile-edge, #b3b8bf),
+      0 1px 3px rgba(30,40,45,0.14);
   }
 
   .lock-key-back {
     font-size: 18px;
-    color: var(--text-secondary, #6b7570);
+    color: var(--tile-text-soft, #3d4750);
   }
 
   .lock-forgot-note {
