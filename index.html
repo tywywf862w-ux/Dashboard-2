@@ -39,6 +39,22 @@
         var amount = 0.72;
         var pageHex = "#" + toHex(r + (255 - r) * amount) + toHex(g + (255 - g) * amount) + toHex(b + (255 - b) * amount);
         document.documentElement.style.setProperty("--bg-page", pageHex);
+
+        // Same reasoning as the header background itself: the title and
+        // other header text need to switch to light-on-dark once the
+        // picked color is dark enough, computed here too so there's no
+        // flash of low-contrast text before the main script takes over.
+        var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        var headerTextColor = luminance < 0.5 ? "#f6f3ec" : "#14251d";
+        document.documentElement.style.setProperty("--header-text-color", headerTextColor);
+
+        // Matching embossed shadow for the same reason — computed here
+        // too so the title's 3D depth is correct from the very first
+        // paint, not just after the main script runs.
+        var headerTitleShadow = luminance < 0.5
+          ? "0 -1px 0 rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.35)"
+          : "0 1px 0 rgba(255,255,255,0.85), 0 2px 0 rgba(255,255,255,0.5), 0 3px 5px rgba(20,30,35,0.25)";
+        document.documentElement.style.setProperty("--header-title-shadow", headerTitleShadow);
       }
     } catch (e) {
       // localStorage unavailable — default background applies as normal.
@@ -459,7 +475,9 @@
     letter-spacing: -0.01em;
     margin: 0;
     cursor: pointer;
-    color: var(--text-primary, #14251d);
+    color: var(--header-text-color, var(--text-primary, #14251d));
+    text-shadow: var(--header-title-shadow, 0 1px 0 rgba(255,255,255,0.85), 0 2px 0 rgba(255,255,255,0.5), 0 3px 5px rgba(20,30,35,0.25));
+    transition: color 0.35s ease, text-shadow 0.35s ease;
   }
 
   h1 .dot { color: var(--accent-green, #1f7a4d); }
@@ -470,6 +488,8 @@
     text-transform: uppercase;
     opacity: 0.65;
     margin-top: 3px;
+    color: var(--header-text-color, var(--text-primary, #14251d));
+    transition: color 0.35s ease;
   }
 
   .creator-credit {
@@ -2135,6 +2155,8 @@
     --border-strong: #eaeef0;
     --border-soft: rgba(20,37,29,0.08);
     --border-faint: rgba(20,37,29,0.05);
+    --header-text-color: #14251d;
+    --header-title-shadow: 0 1px 0 rgba(255,255,255,0.85), 0 2px 0 rgba(255,255,255,0.5), 0 3px 5px rgba(20,30,35,0.25);
   }
 
 
@@ -7581,13 +7603,29 @@
     const headerEl = document.querySelector("header");
     if (headerEl) headerEl.style.backgroundColor = headerValue;
 
-    // Pick readable text on very dark header colors (e.g. black) — the
-    // page body itself is always kept light by derivePageShade() above,
-    // so body text stays dark regardless; only the header's own contrast
-    // needs checking here for its icons/title.
+    // Pick readable title/text color based on the header's own actual
+    // brightness — light text on a dark header, dark text on a light
+    // one — instead of leaving the title a fixed dark color that
+    // visually fades out once the header itself gets dark or close to
+    // the title's own tone. The page body stays light regardless (via
+    // derivePageShade() above), so body text stays dark; this is
+    // specifically about the header card's own contrast.
     const rgb = hexToRgb(headerValue);
     const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+    const headerTextColor = luminance < 0.5 ? "#f6f3ec" : "#14251d";
+    root.style.setProperty("--header-text-color", headerTextColor);
     document.body.style.color = "#1c1c1a";
+
+    // Matching embossed text-shadow for the title — two different
+    // recipes depending on which text color is active, since a shadow
+    // built for dark ink on a light surface (bright highlight below,
+    // soft dark shadow above) looks wrong once the text flips to light
+    // text on a dark surface, and needs the highlight/shadow roles
+    // reversed to still read as "pressed into" the header material.
+    const headerTitleShadow = luminance < 0.5
+      ? "0 -1px 0 rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.35)"
+      : "0 1px 0 rgba(255,255,255,0.85), 0 2px 0 rgba(255,255,255,0.5), 0 3px 5px rgba(20,30,35,0.25)";
+    root.style.setProperty("--header-title-shadow", headerTitleShadow);
 
     const dot = document.getElementById("bg-color-dot");
     if (dot) dot.style.background = headerValue;
