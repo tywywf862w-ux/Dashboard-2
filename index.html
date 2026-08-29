@@ -56,7 +56,7 @@
 </script>
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,500&display=swap');
 
   * { box-sizing: border-box; }
 
@@ -365,7 +365,12 @@
      block content from showing in the space around it. Fixed (not
      sticky/absolute) so it always covers that strip regardless of scroll
      position, and sits behind the header (lower z-index) but above the
-     normal page content. */
+     normal page content. Uses the same --bg-page-header tone as the
+     header itself (not --bg-page) — otherwise, whenever a dark
+     background color is picked, this strip stays on the lighter page
+     tone while the header sits on its own darker tone, showing as a
+     visible seam of mismatched color right where the header's rounded
+     top corner meets it. */
   body::before {
     content: "";
     position: fixed;
@@ -373,7 +378,7 @@
     left: 0;
     right: 0;
     height: calc(12px + env(safe-area-inset-top));
-    background: var(--bg-page, #f4f5f7);
+    background: var(--bg-page-header, var(--bg-page, #f4f5f7));
     z-index: 19;
     pointer-events: none;
   }
@@ -2109,11 +2114,6 @@
     padding: 2px 6px;
   }
 
-  .rule {
-    flex: 1;
-    border-bottom: 1px dashed rgba(20,37,29,0.2);
-  }
-
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -2440,40 +2440,22 @@
 
   /* ---------- "+" add-subject tile ---------- */
 
+  /* Inherits the base .tile's full metallic gradient/emboss/hover-lift
+     styling (same material as every real subject tile) rather than
+     overriding it with a flat dashed placeholder look — only the
+     layout-specific bits (centering the "+", a comfortable min-height)
+     are set here. */
   .add-subject-tile {
-    background: repeating-linear-gradient(
-      135deg,
-      rgba(28,28,26,0.03) 0px, rgba(28,28,26,0.03) 10px,
-      transparent 10px, transparent 20px
-    ), var(--bg-surface, #ffffff);
-    border: 1.5px dashed rgba(28,28,26,0.3);
-    box-shadow: none;
     justify-content: center;
     min-height: 68px;
-  }
-
-  .add-subject-tile::before {
-    display: none;
-  }
-
-  .add-subject-tile:hover {
-    border-color: rgba(20,37,29,0.4);
-    background: repeating-linear-gradient(
-      135deg,
-      rgba(20,37,29,0.04) 0px, rgba(20,37,29,0.04) 10px,
-      transparent 10px, transparent 20px
-    ), var(--bg-hover, #eef1f0);
-    transform: translateY(-2px);
   }
 
   .add-subject-idle {
     display: flex;
     align-items: center;
-    gap: 8px;
     justify-content: center;
     width: 100%;
-    color: var(--text-primary, #14251d);
-    opacity: 0.65;
+    color: var(--tile-text, #1a2229);
   }
 
   .add-subject-tile.adding .add-subject-idle {
@@ -2481,14 +2463,10 @@
   }
 
   .add-subject-plus {
-    font-size: 20px;
+    font-size: 32px;
     font-weight: 700;
     line-height: 1;
-  }
-
-  .add-subject-label {
-    font-size: 13px;
-    font-weight: 600;
+    color: var(--accent-green, #1f7a4d);
   }
 
   .add-subject-form {
@@ -3269,68 +3247,82 @@
   td input[type="number"],
   td input[type="date"] {
     width: 100%;
-    border: 1px solid rgba(28,28,26,0.12);
-    background: rgba(28,28,26,0.025);
+    border: 1px solid rgba(20,30,35,0.18);
+    background: linear-gradient(155deg, rgba(20,30,35,0.06) 0%, rgba(20,30,35,0.02) 100%), var(--bg-surface, #ffffff);
     font: inherit;
     font-size: 13px;
-    color: inherit;
-    padding: 5px 6px;
-    border-radius: 4px;
+    color: var(--tile-text, #1a2229);
+    padding: 6px 8px;
+    border-radius: 6px;
     box-shadow:
-      0 1px 2px rgba(28,28,26,0.08) inset,
-      0 1px 0 rgba(255,255,255,0.5);
+      0 1px 3px rgba(20,30,35,0.15) inset,
+      0 1px 0 rgba(255,255,255,0.6);
     transition: box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   }
 
   td input[type="number"] { width: 64px; }
 
   td input:hover {
-    border-color: rgba(20,37,29,0.35);
-    background: rgba(20,37,29,0.05);
+    border-color: rgba(20,30,35,0.3);
   }
 
   td input:focus {
     outline: none;
     border-color: var(--accent-green, #1f7a4d);
-    background: #fff;
+    background: var(--bg-surface, #ffffff);
     box-shadow:
       0 1px 3px rgba(20,30,35,0.18) inset,
       0 0 0 2px var(--accent-green, #1f7a4d);
   }
 
   .chapter-name-cell input {
-    font-weight: 600;
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--tile-text, #1a2229);
     min-width: 160px;
+  }
+
+  /* The Spaced Revision Dashboard shows chapter names as read-only text
+     (not an input) — same serif/weight treatment as the editable
+     version above, so a chapter's name reads consistently wherever it
+     appears across the app's different table views. */
+  .chapter-name-cell strong {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--tile-text, #1a2229);
   }
 
   select.revision-select,
   select.subject-select {
     font: inherit;
     font-size: 12px;
-    border: 1px solid rgba(20,37,29,0.35);
-    border-radius: 4px;
-    padding: 5px 6px;
-    background: #fff;
-    color: inherit;
+    border: 1px solid rgba(20,30,35,0.18);
+    border-radius: 6px;
+    padding: 6px 8px;
+    background: linear-gradient(155deg, rgba(20,30,35,0.06) 0%, rgba(20,30,35,0.02) 100%), var(--bg-surface, #ffffff);
+    color: var(--tile-text, #1a2229);
     width: 100%;
     box-shadow:
-      0 1px 2px rgba(28,28,26,0.1) inset,
-      0 1px 0 rgba(255,255,255,0.5);
+      0 1px 3px rgba(20,30,35,0.15) inset,
+      0 1px 0 rgba(255,255,255,0.6);
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   select.revision-select:hover,
   select.subject-select:hover {
-    border-color: rgba(20,37,29,0.35);
+    border-color: rgba(20,30,35,0.3);
   }
 
   select.revision-select:focus,
   select.subject-select:focus {
     outline: none;
-    border-color: var(--text-primary, #14251d);
+    border-color: var(--accent-green, #1f7a4d);
+    background: var(--bg-surface, #ffffff);
     box-shadow:
-      0 1px 3px rgba(28,28,26,0.15) inset,
-      0 1px 0 rgba(255,255,255,0.6);
+      0 1px 3px rgba(20,30,35,0.18) inset,
+      0 0 0 2px var(--accent-green, #1f7a4d);
   }
 
   /* ---------- Revised pulse / checkmark celebration ---------- */
@@ -5191,7 +5183,6 @@
         <button class="inline-edit-btn group-edit-btn" data-edit-target="label" title="Rename group" aria-label="Rename group">&#9998;</button>
         <span class="group-tag editable-text" contenteditable="false" spellcheck="false" data-group-key="${grp}">${groupTag}</span>
         <button class="inline-edit-btn group-edit-btn" data-edit-target="tag" title="Edit year" aria-label="Edit year">&#9998;</button>
-        <span class="rule"></span>
       `;
 
       const labelEl = groupHeader.querySelector(".group-label-text");
@@ -5462,10 +5453,13 @@
       // "+" tile — add a new subject to this year/group
       const addTile = document.createElement("div");
       addTile.className = "tile add-subject-tile";
+      addTile.setAttribute("role", "button");
+      addTile.setAttribute("tabindex", "0");
+      addTile.setAttribute("title", "Add subject");
+      addTile.setAttribute("aria-label", "Add subject");
       addTile.innerHTML = `
         <div class="add-subject-idle">
           <span class="add-subject-plus">+</span>
-          <span class="add-subject-label">Add subject</span>
         </div>
         <div class="add-subject-form">
           <div class="add-subject-form-row">
@@ -5534,6 +5528,13 @@
 
       addTile.addEventListener("click", (e) => {
         if (!addTile.classList.contains("adding")) enterAddMode(e);
+      });
+
+      addTile.addEventListener("keydown", (e) => {
+        if ((e.key === "Enter" || e.key === " ") && !addTile.classList.contains("adding")) {
+          e.preventDefault();
+          enterAddMode(e);
+        }
       });
 
       addTile.querySelector(".add-subject-confirm").addEventListener("click", (e) => {
