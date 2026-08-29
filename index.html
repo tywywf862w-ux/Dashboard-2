@@ -499,35 +499,11 @@
     margin-left: 4px;
   }
 
-  .inline-edit-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 12px;
-    opacity: 0.35;
-    padding: 2px 4px;
-    vertical-align: middle;
-    color: inherit;
-    transition: opacity 0.15s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .inline-edit-btn:hover {
-    opacity: 0.85;
-    transform: scale(1.15);
-  }
-
-  .inline-edit-btn:active {
-    transform: scale(0.95);
-  }
-
-  h1 .inline-edit-btn {
-    font-size: 15px;
-  }
-
   .editable-text {
     outline: none;
     border-radius: 5px;
     padding: 1px 4px;
+    cursor: text;
     transition: background 0.15s ease, box-shadow 0.15s ease;
   }
 
@@ -1877,10 +1853,6 @@
     flex-wrap: wrap;
   }
 
-  .group-edit-btn {
-    font-size: 11px;
-  }
-
   /* ---------- "+ Add section" popover (header toolbar icon) ---------- */
 
   .add-section-popover {
@@ -2083,7 +2055,11 @@
     width: 10px;
     height: 10px;
     display: inline-block;
-    border-radius: 2px;
+    border-radius: 3px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 -1px 1px rgba(0,0,0,0.25) inset,
+      0 1px 2px rgba(0,0,0,0.2);
   }
 
   .group-header h2 {
@@ -2091,17 +2067,27 @@
     font-weight: 600;
     font-size: 20px;
     margin: 0;
-    color: var(--text-primary, #14251d);
+    color: var(--tile-text, #1a2229);
+    text-shadow:
+      0 1px 0 rgba(255,255,255,0.75),
+      0 2px 4px rgba(20,30,35,0.15);
   }
 
   .group-tag {
     font-size: 11px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    opacity: 0.5;
-    border: 1px solid rgba(20,37,29,0.2);
-    border-radius: 3px;
-    padding: 2px 6px;
+    font-weight: 600;
+    color: var(--tile-text-soft, #3d4750);
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 5px;
+    padding: 3px 8px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -2px 4px rgba(20,30,35,0.08) inset,
+      0 1px 0 var(--tile-edge, #b3b8bf),
+      0 2px 4px rgba(30,40,45,0.12);
   }
 
   .grid {
@@ -4089,12 +4075,10 @@
     <div class="title-row">
       <h1 id="home-link">
         <span class="editable-text" id="main-title-text" contenteditable="false" spellcheck="false">MBBS Dashboard</span><span class="dot">.</span>
-        <button class="inline-edit-btn" id="edit-title-btn" title="Edit dashboard title" aria-label="Edit dashboard title">&#9998;</button>
       </h1>
     </div>
     <div class="eyebrow">
       <strong class="editable-text" id="exam-name-1-text" contenteditable="false" spellcheck="false">INI-CET</strong>
-      <button class="inline-edit-btn" id="edit-exam-names-btn" title="Edit exam name" aria-label="Edit exam name">&#9998;</button>
       <span class="creator-credit">&middot; Created by Dr Sushant Kumar</span>
     </div>
     <p class="subtitle" id="header-subtitle"></p>
@@ -5172,14 +5156,11 @@
       groupHeader.innerHTML = `
         <span class="dot-marker" style="background:${meta.tint}"></span>
         <h2><span class="editable-text group-label-text" contenteditable="false" spellcheck="false" data-group-key="${grp}">${groupLabel}</span></h2>
-        <button class="inline-edit-btn group-edit-btn" data-edit-target="label" title="Rename group" aria-label="Rename group">&#9998;</button>
         <span class="group-tag editable-text" contenteditable="false" spellcheck="false" data-group-key="${grp}">${groupTag}</span>
-        <button class="inline-edit-btn group-edit-btn" data-edit-target="tag" title="Edit year" aria-label="Edit year">&#9998;</button>
       `;
 
       const labelEl = groupHeader.querySelector(".group-label-text");
       const tagEl = groupHeader.querySelector(".group-tag");
-      const [labelEditBtn, tagEditBtn] = groupHeader.querySelectorAll(".group-edit-btn");
 
       function commitLabel() {
         labelEl.contentEditable = "false";
@@ -5193,15 +5174,13 @@
         renderSubjectList();
       }
 
-      labelEditBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
+      attachLongPressEdit(labelEl, () => {
         labelEl.contentEditable = "true";
         labelEl.focus();
         document.execCommand("selectAll", false, null);
       });
 
-      tagEditBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
+      attachLongPressEdit(tagEl, () => {
         tagEl.contentEditable = "true";
         tagEl.focus();
         document.execCommand("selectAll", false, null);
@@ -8345,6 +8324,57 @@
   // Makes a contenteditable span toggle into edit mode when its adjacent
   // pencil button is clicked, and saves on blur or Enter. Falls back to a
   // default label if the field is ever left empty.
+  // Generic long-press-to-edit helper, reused by every renamable text
+  // field in the app (dashboard title, exam name, section labels, year
+  // tags) — replaces the old visible pencil-icon buttons with the same
+  // long-press gesture already used elsewhere (subject tile rename/
+  // remove menu), so there's one consistent way to start editing
+  // anything across the whole dashboard. Same 550ms hold + 10px
+  // move-cancel threshold as that existing pattern, using the unified
+  // pointer events so it works identically for touch and mouse.
+  function attachLongPressEdit(el, onActivate) {
+    if (!el) return;
+    let pressTimer = null;
+    let pressStartPoint = null;
+    const MOVE_CANCEL_THRESHOLD = 10;
+
+    function startPress(e) {
+      if (el.contentEditable === "true") return; // already editing
+      pressStartPoint = { x: e.clientX, y: e.clientY };
+      pressTimer = setTimeout(() => {
+        onActivate();
+      }, 550);
+    }
+
+    function movePress(e) {
+      if (!pressStartPoint) return;
+      const dx = Math.abs(e.clientX - pressStartPoint.x);
+      const dy = Math.abs(e.clientY - pressStartPoint.y);
+      if (dx > MOVE_CANCEL_THRESHOLD || dy > MOVE_CANCEL_THRESHOLD) {
+        clearTimeout(pressTimer);
+      }
+    }
+
+    function cancelPress() {
+      clearTimeout(pressTimer);
+      pressStartPoint = null;
+    }
+
+    el.addEventListener("pointerdown", startPress);
+    el.addEventListener("pointermove", movePress);
+    el.addEventListener("pointerup", cancelPress);
+    el.addEventListener("pointerleave", cancelPress);
+    el.addEventListener("pointercancel", cancelPress);
+    // Right-click also starts editing on desktop, same convenience the
+    // tile context menu offers, and suppresses the browser's own
+    // right-click menu so it doesn't appear instead.
+    el.addEventListener("contextmenu", (e) => {
+      if (el.contentEditable === "true") return;
+      e.preventDefault();
+      onActivate();
+    });
+  }
+
   function makeTextEditable(elId, storageKey, defaultText, labels) {
     const el = document.getElementById(elId);
     if (!el) return;
@@ -8384,15 +8414,13 @@
     const titleEl = makeTextEditable("main-title-text", "title", "MBBS Dashboard", labels);
     const exam1El = makeTextEditable("exam-name-1-text", "exam1", "INI-CET", labels);
 
-    document.getElementById("edit-title-btn").addEventListener("click", (e) => {
-      e.stopPropagation();
+    attachLongPressEdit(titleEl, () => {
       titleEl.contentEditable = "true";
       titleEl.focus();
       document.execCommand("selectAll", false, null);
     });
 
-    document.getElementById("edit-exam-names-btn").addEventListener("click", (e) => {
-      e.stopPropagation();
+    attachLongPressEdit(exam1El, () => {
       exam1El.contentEditable = "true";
       exam1El.focus();
       document.execCommand("selectAll", false, null);
