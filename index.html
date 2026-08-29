@@ -365,12 +365,12 @@
      block content from showing in the space around it. Fixed (not
      sticky/absolute) so it always covers that strip regardless of scroll
      position, and sits behind the header (lower z-index) but above the
-     normal page content. Uses the same --bg-page-header tone as the
-     header itself (not --bg-page) — otherwise, whenever a dark
-     background color is picked, this strip stays on the lighter page
-     tone while the header sits on its own darker tone, showing as a
-     visible seam of mismatched color right where the header's rounded
-     top corner meets it. */
+     normal page content. This strip is genuinely PAGE background (the
+     12px gap the header floats down from), not part of the header card
+     itself — so it uses --bg-page, matching what a person would
+     actually expect to see there, rather than the header's own
+     (possibly much darker) tone, which would otherwise show up as an
+     unwanted solid dark bar sitting above the card. */
   body::before {
     content: "";
     position: fixed;
@@ -378,13 +378,13 @@
     left: 0;
     right: 0;
     height: calc(12px + env(safe-area-inset-top));
-    background: var(--bg-page-header, var(--bg-page, #f4f5f7));
+    background: var(--bg-page, #f4f5f7);
     z-index: 19;
     pointer-events: none;
   }
 
   header {
-    margin: 12px 16px 0;
+    margin: 12px 0 0;
     border: 1px solid var(--tile-border, #c7cbd1);
     border-radius: 20px;
     padding: 10px 20px 14px;
@@ -1103,7 +1103,7 @@
     }
 
     header {
-      margin: 8px 10px 0;
+      margin: 8px 0 0;
       padding: 8px 14px 8px;
       padding-top: calc(8px + env(safe-area-inset-top));
       top: 8px;
