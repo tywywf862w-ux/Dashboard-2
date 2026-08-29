@@ -1026,6 +1026,40 @@
   /* ---------- Mobile: tighter single-row spacing, plus tighter header
      spacing overall ---------- */
   @media (max-width: 480px) {
+    /* The page-header-card (subject title / stats / toolbar) tightened
+       further for phone widths — the base rules above already shrank
+       it from the original oversized version, but a long chapter list
+       with many chapters still benefits from every extra pixel of
+       vertical room this saves. */
+    .page-header-card {
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      border-radius: 14px;
+    }
+
+    .subject-title-row {
+      margin-bottom: 0;
+    }
+
+    .subject-stats {
+      gap: 10px;
+      font-size: 10.5px;
+      margin: 3px 0 10px;
+    }
+
+    .toolbar {
+      gap: 6px;
+    }
+
+    .add-btn {
+      padding: 6px 10px;
+      font-size: 11.5px;
+    }
+
+    .save-note {
+      font-size: 9.5px;
+    }
+
     .date-strip {
       width: 100%;
       min-width: 0;
@@ -1800,9 +1834,13 @@
 
   /* ---------- Subject list view ---------- */
 
-  #view-subjects.hidden,
-  #view-chapters.hidden,
-  #view-day.hidden {
+  /* Any of main's direct view-container children — every one of them
+     uses this same "add .hidden to switch views" pattern via
+     showView(). Targeting them structurally (rather than listing each
+     view's id by name) means a newly added view can never silently end
+     up with a working JS toggle but no matching CSS rule, the way
+     #view-revision/-due/-backlog and #view-activity-feed once did here. */
+  main > div.hidden {
     display: none;
   }
 
@@ -2932,13 +2970,13 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .subject-title {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(24px, 3.4vw, 32px);
+    font-size: clamp(20px, 3vw, 28px);
     color: var(--tile-text, #1a2229);
   }
 
@@ -2950,9 +2988,9 @@
   .page-header-card {
     background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
     border: 1px solid var(--tile-border, #c7cbd1);
-    border-radius: 18px;
-    padding: 18px 20px;
-    margin-bottom: 18px;
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
     position: relative;
     overflow: hidden;
     box-shadow:
@@ -3051,10 +3089,10 @@
 
   .subject-stats {
     display: flex;
-    gap: 18px;
-    font-size: 12px;
+    gap: 14px;
+    font-size: 11.5px;
     opacity: 0.7;
-    margin: 6px 0 22px;
+    margin: 4px 0 12px;
     flex-wrap: wrap;
   }
 
@@ -3065,8 +3103,8 @@
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: 8px;
+    margin-bottom: 0;
   }
 
   .add-btn {
@@ -3074,9 +3112,12 @@
     color: var(--bg-page, #f4f5f7);
     border: 1px solid var(--accent-green, #1f7a4d);
     border-radius: 5px;
-    padding: 8px 14px;
+    padding: 6px 12px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
     font: inherit;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
     box-shadow:
       0 2px 6px rgba(31,122,77,0.25);
@@ -3094,7 +3135,7 @@
   }
 
   .save-note {
-    font-size: 11px;
+    font-size: 10px;
     opacity: 0.5;
   }
 
@@ -3591,6 +3632,322 @@
     accent-color: #2d6a4f;
   }
 
+  /* ---------- Chapter page floating hub: central "+" fans out to
+     "Add chapter" and "Search" ---------- */
+
+  .chapter-fab-hub {
+    position: fixed;
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 25;
+  }
+
+  /* The central toggle button — smaller than the two options it opens,
+     since its only job is to open/close the menu rather than being a
+     primary action itself. */
+  .chapter-fab-toggle {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(155deg, #2d9663 0%, #1f7a4d 22%, #14532e 55%, #1a6640 78%, #238a58 100%);
+    border: 1px solid #0f3d22;
+    cursor: pointer;
+    z-index: 2;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -4px 6px rgba(0,0,0,0.25) inset,
+      0 2px 0 #0f3d22,
+      0 4px 12px rgba(20,83,46,0.4);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+  }
+
+  .chapter-fab-toggle:hover {
+    transform: translateY(-2px) scale(1.04);
+  }
+
+  .chapter-fab-toggle:active {
+    transform: translateY(1px) scale(0.96);
+  }
+
+  .chapter-fab-toggle svg {
+    position: absolute;
+    width: 19px;
+    height: 19px;
+    stroke: #ffffff;
+    transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .chapter-fab-toggle-close {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.5);
+  }
+
+  .chapter-fab-hub[data-open="true"] .chapter-fab-toggle {
+    transform: rotate(0deg);
+  }
+
+  .chapter-fab-hub[data-open="true"] .chapter-fab-toggle-plus {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.5);
+  }
+
+  .chapter-fab-hub[data-open="true"] .chapter-fab-toggle-close {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+
+  /* Both satellites sit collapsed at the hub's own position until
+     opened, then swing out along a genuine arc — up and to the left —
+     rather than stacking straight upward, since the hub lives at the
+     bottom-right corner and an arc reads as more deliberately "radial"
+     than a vertical column of buttons. */
+  .chapter-fab-satellite {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(0, 0) scale(0.5);
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s ease;
+    z-index: 1;
+  }
+
+  .chapter-fab-hub[data-open="true"] .chapter-fab-satellite {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Arc positions computed from a shared radius, at 100° and 175°
+     measured from the hub's center (0° = straight right, moving
+     counter-clockwise) — pulled in tight (58px radius, close to the
+     buttons' own combined size) so the fan sits close around the hub
+     rather than floating with visible gaps, while the wider angular
+     spread keeps the two satellites safely clear of touching each
+     other mid-animation. */
+  .chapter-fab-hub[data-open="true"] .chapter-fab-add {
+    transform: translate(-10px, -57px) scale(1);
+    transition-delay: 0ms;
+  }
+
+  .chapter-fab-hub[data-open="true"] .fab-search-wrap {
+    transform: translate(-58px, -5px) scale(1);
+    transition-delay: 40ms;
+  }
+
+  .chapter-fab-add {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(155deg, #2d9663 0%, #1f7a4d 22%, #14532e 55%, #1a6640 78%, #238a58 100%);
+    border: 1px solid #0f3d22;
+    cursor: pointer;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -5px 8px rgba(0,0,0,0.25) inset,
+      0 2px 0 #0f3d22,
+      0 6px 16px rgba(20,83,46,0.4);
+  }
+
+  .chapter-fab-add svg {
+    width: 21px;
+    height: 21px;
+    stroke: #ffffff;
+  }
+
+  .chapter-fab-add:hover {
+    filter: brightness(1.08);
+  }
+
+  .chapter-fab-add:active {
+    filter: brightness(0.94);
+  }
+
+  /* ---------- The search satellite: a circular button that expands
+     into a field, same interaction as before, just repositioned as one
+     of the two fanned-out options instead of the sole floating element. ---------- */
+
+  .fab-search-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .fab-search-btn {
+    position: relative;
+    z-index: 1;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    cursor: pointer;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -4px 8px rgba(20,30,35,0.1) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 4px 12px rgba(30,40,45,0.2);
+    transition: background 0.15s ease;
+  }
+
+  .fab-search-btn svg {
+    width: 19px;
+    height: 19px;
+    stroke: var(--tile-text, #1a2229);
+  }
+
+  .fab-search-wrap[data-active="true"] .fab-search-btn {
+    background: linear-gradient(155deg, #2d9663 0%, #1f7a4d 22%, #14532e 55%, #1a6640 78%, #238a58 100%);
+  }
+
+  .fab-search-wrap[data-active="true"] .fab-search-btn svg {
+    stroke: #ffffff;
+  }
+
+  /* The input expands out to the left of the button when active, using
+     the same metallic recessed-field look as every other search/edit
+     field in the app, so it reads as part of the same material even
+     though it's floating on its own. */
+  .fab-search-input {
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+    margin-right: 0;
+    font: inherit;
+    font-size: 14px;
+    padding: 0;
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 24px;
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #f6f7f8 100%);
+    color: var(--tile-text, #1a2229);
+    box-shadow:
+      0 1px 3px rgba(20,30,35,0.15) inset,
+      0 4px 12px rgba(30,40,45,0.14);
+    transition: width 0.22s cubic-bezier(0.34, 1.2, 0.64, 1), opacity 0.15s ease, padding 0.22s ease, margin 0.22s ease;
+  }
+
+  .fab-search-wrap[data-active="true"] .fab-search-input {
+    width: min(190px, 55vw);
+    opacity: 1;
+    pointer-events: auto;
+    padding: 0 14px;
+    margin-right: 8px;
+    height: 42px;
+  }
+
+  @media (max-width: 480px) {
+    .chapter-fab-hub {
+      right: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+
+    .chapter-fab-toggle {
+      width: 40px;
+      height: 40px;
+    }
+
+    .chapter-fab-add,
+    .fab-search-btn {
+      width: 44px;
+      height: 44px;
+    }
+
+    .chapter-fab-toggle svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .chapter-fab-add svg,
+    .fab-search-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .chapter-fab-hub[data-open="true"] .chapter-fab-add {
+      transform: translate(-9px, -52px) scale(1);
+    }
+
+    .chapter-fab-hub[data-open="true"] .fab-search-wrap {
+      transform: translate(-53px, -5px) scale(1);
+    }
+
+    .fab-search-wrap[data-active="true"] .fab-search-input {
+      width: min(150px, 50vw);
+      height: 38px;
+      font-size: 13px;
+    }
+  }
+
+  /* Reused for the day-entry FAB, which stays a standalone button
+     exactly as before — no hub needed there since it only has the one
+     action. Sized to match the chapter page's hub toggle (44px/40px)
+     rather than the larger original 56px, so both floating buttons
+     read as the same scale of control across the app. */
+  .fab-add-chapter {
+    position: fixed;
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(155deg, #2d9663 0%, #1f7a4d 22%, #14532e 55%, #1a6640 78%, #238a58 100%);
+    border: 1px solid #0f3d22;
+    cursor: pointer;
+    z-index: 25;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.25) inset,
+      0 -4px 6px rgba(0,0,0,0.25) inset,
+      0 2px 0 #0f3d22,
+      0 4px 12px rgba(20,83,46,0.4);
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+  }
+
+  .fab-add-chapter svg {
+    width: 19px;
+    height: 19px;
+    stroke: #ffffff;
+  }
+
+  .fab-add-chapter:hover {
+    transform: translateY(-2px) scale(1.04);
+  }
+
+  .fab-add-chapter:active {
+    transform: translateY(1px) scale(0.96);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.15) inset,
+      0 -2px 4px rgba(0,0,0,0.2) inset,
+      0 1px 0 #0f3d22,
+      0 2px 6px rgba(20,83,46,0.35);
+  }
+
+  @media (max-width: 480px) {
+    .fab-add-chapter {
+      right: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom));
+      width: 40px;
+      height: 40px;
+    }
+
+    .fab-add-chapter svg {
+      width: 17px;
+      height: 17px;
+    }
+  }
+
   .toast {
     position: fixed;
     bottom: 20px;
@@ -4068,6 +4425,55 @@
   <div id="view-day" class="hidden"></div>
   <div id="view-activity-feed" class="hidden"></div>
 </main>
+
+<!-- Floating hub for the chapter tracker page — tapping the central "+"
+     fans out two options: the original "+ Add chapter" action (restored
+     exactly as it was) and a search field that filters the chapter
+     table live by name. Only shown while viewing a subject's chapter
+     tracker, and stays fixed to the viewport regardless of scroll
+     position. -->
+<div class="chapter-fab-hub" id="chapter-fab-hub" data-open="false" style="display:none">
+  <button class="chapter-fab-toggle" id="chapter-fab-toggle" title="Chapter actions" aria-label="Chapter actions" aria-expanded="false">
+    <svg class="chapter-fab-toggle-plus" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"></circle>
+      <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"></circle>
+      <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"></circle>
+      <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"></circle>
+    </svg>
+    <svg class="chapter-fab-toggle-close" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 6l12 12M18 6L6 18"></path>
+    </svg>
+  </button>
+
+  <button class="chapter-fab-satellite chapter-fab-add" id="fab-add-chapter" title="Add chapter" aria-label="Add chapter">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 5v14"></path>
+      <path d="M5 12h14"></path>
+    </svg>
+  </button>
+
+  <div class="chapter-fab-satellite fab-search-wrap" id="fab-search-wrap">
+    <input type="text" class="fab-search-input" id="fab-search-input" placeholder="Search chapters…" autocomplete="off" />
+    <button class="fab-search-btn" id="fab-search-btn" title="Search chapters" aria-label="Search chapters">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"></circle>
+        <path d="M21 21l-4.3-4.3"></path>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- Floating "+ Add entry" button — same reasoning as the chapter FAB
+     above, but for the Daily Work Target day view. Since this page's
+     content is fully re-rendered on every date change, its click
+     handler is attached once here and reads currentDayViewDate at
+     click-time instead of being re-attached per render. -->
+<button class="fab-add-chapter" id="fab-add-entry" title="Add entry" aria-label="Add entry" style="display:none">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5v14"></path>
+    <path d="M5 12h14"></path>
+  </svg>
+</button>
 
 <div class="toast" id="toast">
   <span id="toast-text"></span>
@@ -4688,6 +5094,12 @@
   // ---------- View switching ----------
   let backAction = null; // function to call on back button; null = goHome
 
+  // Tracks which date's daily-entry view is currently open, so the
+  // floating "+" (fixed outside the re-rendered content) always knows
+  // which day to add the new entry to without needing its own
+  // per-render click listener.
+  let currentDayViewDate = null;
+
   function showView(view) {
     document.getElementById("view-subjects").classList.toggle("hidden", view !== "subjects");
     document.getElementById("view-chapters").classList.toggle("hidden", view !== "chapters");
@@ -4706,6 +5118,30 @@
     const isMainDashboard = view === "subjects";
     document.querySelector("header").classList.toggle("hidden-on-inner-page", !isMainDashboard);
     document.querySelector(".main-hub-row").classList.toggle("hidden-on-inner-page", !isMainDashboard);
+
+    // The floating chapter-actions hub only makes sense on a subject's
+    // own chapter tracker — every other view either has its own
+    // toolbar action already in easy reach, or isn't about chapters at
+    // all.
+    const fabHub = document.getElementById("chapter-fab-hub");
+    if (fabHub) {
+      fabHub.style.display = view === "chapters" ? "block" : "none";
+      if (view !== "chapters") {
+        // Leaving the chapter view — collapse the hub and clear
+        // whatever was typed in search, so returning later (even to a
+        // different subject) starts fresh rather than reopening
+        // mid-search or fanned-out.
+        fabHub.setAttribute("data-open", "false");
+        const searchWrap = document.getElementById("fab-search-wrap");
+        if (searchWrap) searchWrap.setAttribute("data-active", "false");
+        const searchInput = document.getElementById("fab-search-input");
+        if (searchInput) searchInput.value = "";
+      }
+    }
+
+    // Same reasoning, for the Daily Work Target day view's own entries.
+    const entryFab = document.getElementById("fab-add-entry");
+    if (entryFab) entryFab.style.display = view === "day" ? "flex" : "none";
   }
 
   function goHome() {
@@ -5270,6 +5706,13 @@
     const totalPyq = chapters.reduce((a, c) => a + (Number(c.pyq) || 0), 0);
     const doneCount = chapters.filter(c => c.revision === "done").length;
 
+    // #add-chapter-btn stays in the DOM but hidden (style="display:none"
+    // below) rather than removed — the empty-state CTA and the floating
+    // "+ Add chapter" satellite in the chapter FAB hub both trigger
+    // adding a chapter by calling .click() on this exact element, so its
+    // real click handler (registered further down) needs to keep
+    // existing even though the button itself is no longer shown in the
+    // toolbar.
     container.innerHTML = `
       <div class="page-header-card">
       <div class="subject-title-row">
@@ -5282,7 +5725,7 @@
         <span><strong>${doneCount}</strong>/${chapters.length || 0} revised</span>
       </div>
       <div class="toolbar">
-        <button class="add-btn" id="add-chapter-btn">+ Add chapter</button>
+        <button class="add-btn" id="add-chapter-btn" style="display:none">+ Add chapter</button>
         <button class="add-btn" id="open-revision-btn" style="background:${meta.tint}">Spaced Revision Dashboard</button>
         <span class="save-note">changes save automatically</span>
       </div>
@@ -5411,6 +5854,15 @@
 
       tbody.appendChild(tr);
     });
+
+    // If the search field still has text in it (e.g. a chapter was just
+    // added or removed while a search was active), keep the filter
+    // applied to the freshly rendered rows instead of silently showing
+    // everything again.
+    const searchInput = document.getElementById("fab-search-input");
+    if (searchInput && searchInput.value.trim() !== "") {
+      filterChapterRows(searchInput.value);
+    }
   }
 
   function celebrateRevised(rowEl, cellWrapEl) {
@@ -6153,6 +6605,7 @@
   function renderDayView(dateStr) {
     const container = document.getElementById("view-day");
     const entries = getDayEntries(dateStr);
+    currentDayViewDate = dateStr;
 
     const totalMcq = entries.reduce((a, e) => a + (Number(e.mcq) || 0), 0);
     const doneCount = entries.filter(e => e.mcqDone && e.lectureDone && e.revisionDone).length;
@@ -6169,7 +6622,6 @@
       </div>
 
       <div class="toolbar">
-        <button class="add-btn" id="add-day-entry-btn">+ Add entry</button>
         <span class="save-note">changes save automatically</span>
       </div>
       </div>
@@ -6190,18 +6642,6 @@
         </div>
       </div>
     `;
-
-    document.getElementById("add-day-entry-btn").addEventListener("click", () => {
-      entries.push({
-        id: uid(),
-        subjectId: SUBJECTS[0].id,
-        mcq: "", mcqDone: false,
-        lecture: "", lectureDone: false,
-        revision: "none", revisionDone: false,
-      });
-      persistDaily();
-      renderDayView(dateStr);
-    });
 
     renderDayRows(dateStr, entries);
   }
@@ -7980,6 +8420,131 @@
   document.getElementById("open-revision-backlog-tile").addEventListener("click", openRevisionBacklogDashboard);
   document.getElementById("open-activity-feed-btn").addEventListener("click", openActivityFeedDashboard);
   initTimerWidget();
+
+  // The floating chapter-actions hub: tapping the central "+" fans out
+  // two options — "Add chapter" (re-triggers the real toolbar button,
+  // so there's exactly one place that logic lives) and a search field
+  // that filters the chapter table live by name. Attached once here,
+  // not per-render, since the hub itself is a permanent fixture outside
+  // the dynamically rendered chapter content.
+  (function initChapterFabHub() {
+    const hub = document.getElementById("chapter-fab-hub");
+    const hubToggle = document.getElementById("chapter-fab-toggle");
+    const addBtn = document.getElementById("fab-add-chapter");
+    const searchWrap = document.getElementById("fab-search-wrap");
+    const searchBtn = document.getElementById("fab-search-btn");
+    const searchInput = document.getElementById("fab-search-input");
+
+    function openHub() {
+      hub.setAttribute("data-open", "true");
+      hubToggle.setAttribute("aria-expanded", "true");
+    }
+
+    function closeHub() {
+      hub.setAttribute("data-open", "false");
+      hubToggle.setAttribute("aria-expanded", "false");
+      closeSearch();
+    }
+
+    function openSearch() {
+      searchWrap.setAttribute("data-active", "true");
+      searchBtn.setAttribute("aria-expanded", "true");
+      searchInput.focus();
+    }
+
+    function closeSearch() {
+      searchWrap.setAttribute("data-active", "false");
+      searchBtn.setAttribute("aria-expanded", "false");
+      searchInput.value = "";
+      filterChapterRows("");
+    }
+
+    hubToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (hub.getAttribute("data-open") === "true") closeHub();
+      else openHub();
+    });
+
+    // "+ Add chapter" simply re-triggers the real toolbar button inside
+    // the (dynamically rendered) chapter view, then folds the hub back
+    // closed so it doesn't sit open over the newly added row.
+    addBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const realBtn = document.getElementById("add-chapter-btn");
+      if (realBtn) realBtn.click();
+      closeHub();
+    });
+
+    searchBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (searchWrap.getAttribute("data-active") === "true") closeSearch();
+      else openSearch();
+    });
+
+    searchInput.addEventListener("click", (e) => e.stopPropagation());
+    searchInput.addEventListener("input", () => filterChapterRows(searchInput.value));
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!hub.contains(e.target)) closeHub();
+    });
+  })();
+
+  // Hides/shows rows in the currently-rendered chapter table by
+  // matching the typed text against each row's chapter-name input
+  // value (case-insensitive, matches anywhere in the name). An empty
+  // query shows every row again. Also toggles a "no matches" message
+  // if a real search genuinely finds nothing, so an empty-looking table
+  // doesn't read as a bug.
+  function filterChapterRows(query) {
+    const tbody = document.getElementById("chapter-tbody");
+    if (!tbody) return;
+    const needle = query.trim().toLowerCase();
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    let anyVisible = false;
+
+    rows.forEach(row => {
+      const nameInput = row.querySelector(".chapter-name-cell input, input[type=text]");
+      const name = nameInput ? nameInput.value.toLowerCase() : "";
+      const matches = needle === "" || name.includes(needle);
+      row.style.display = matches ? "" : "none";
+      if (matches) anyVisible = true;
+    });
+
+    let noMatchRow = tbody.querySelector(".search-no-match-row");
+    if (needle !== "" && !anyVisible) {
+      if (!noMatchRow) {
+        noMatchRow = document.createElement("tr");
+        noMatchRow.className = "search-no-match-row";
+        const colCount = tbody.closest("table").querySelectorAll("thead th").length || 6;
+        noMatchRow.innerHTML = `<td colspan="${colCount}"><div class="empty-state">No chapters match "${escapeHtml(query.trim())}".</div></td>`;
+        tbody.appendChild(noMatchRow);
+      }
+    } else if (noMatchRow) {
+      noMatchRow.remove();
+    }
+  }
+
+  // The floating "+ Add entry" button contains the actual add-entry
+  // logic directly, since (unlike chapters) there's no longer a
+  // toolbar button to re-trigger — it reads currentDayViewDate, set at
+  // the top of renderDayView(), to know which day to add the new entry
+  // to, and is attached once here rather than per-render.
+  document.getElementById("fab-add-entry").addEventListener("click", () => {
+    if (!currentDayViewDate) return;
+    const entries = getDayEntries(currentDayViewDate);
+    entries.push({
+      id: uid(),
+      subjectId: SUBJECTS[0].id,
+      mcq: "", mcqDone: false,
+      lecture: "", lectureDone: false,
+      revision: "none", revisionDone: false,
+    });
+    persistDaily();
+    renderDayView(currentDayViewDate);
+  });
 
   // ---------- Service worker registration (offline support) ----------
   // Only registers when served over http(s) — silently no-ops on file://
