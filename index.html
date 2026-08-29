@@ -243,12 +243,13 @@
     font: inherit;
     font-size: 12px;
     font-weight: 600;
-    border: none;
+    border: 1px solid var(--accent-green, #1f7a4d);
     border-radius: 6px;
     padding: 8px 10px;
     cursor: pointer;
-    background: var(--text-primary, #14251d);
-    color: var(--bg-page, #f4f5f7);
+    background: var(--accent-green, #1f7a4d);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(31,122,77,0.25);
     transition: filter 0.12s ease, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
@@ -1407,13 +1408,35 @@
     position: absolute;
     top: calc(100% + 10px);
     right: 0;
-    background: var(--bg-surface, #ffffff);
-    border: 1px solid var(--border-strong, #eaeef0);
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
     border-radius: 18px;
     padding: 14px;
-    box-shadow: 0 4px 12px rgba(20,37,29,0.08), 0 16px 36px rgba(20,37,29,0.1);
+    position: absolute;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -5px 8px rgba(20,30,35,0.06) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 6px 20px rgba(30,40,45,0.2);
     z-index: 50;
     width: 220px;
+  }
+
+  .color-picker-popover::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 40%;
+    border-radius: 18px 18px 60% 60% / 18px 18px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .color-picker-popover > * {
+    position: relative;
+    z-index: 1;
   }
 
   .color-picker-popover.visible {
@@ -1690,21 +1713,21 @@
   .profile-field input {
     font: inherit;
     font-size: 13px;
-    border: 1px solid var(--text-primary, #14251d)33;
-    border-radius: 4px;
+    border: 1px solid rgba(20,37,29,0.2);
+    border-radius: 6px;
     padding: 6px 8px;
     color: inherit;
-    background: var(--bg-surface, #ffffff);
-    box-shadow: 0 1px 2px rgba(28,28,26,0.06) inset;
+    background: rgba(20,30,35,0.04);
+    box-shadow: 0 1px 3px rgba(20,30,35,0.12) inset;
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .profile-field input:focus {
     outline: none;
-    border-color: var(--text-primary, #14251d);
+    border-color: var(--accent-green, #1f7a4d);
     box-shadow:
-      0 1px 3px rgba(28,28,26,0.15) inset,
-      0 1px 0 rgba(255,255,255,0.6);
+      0 1px 3px rgba(20,30,35,0.15) inset,
+      0 0 0 2px var(--accent-green, #1f7a4d);
   }
 
   .profile-note {
@@ -1732,7 +1755,7 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    margin-top: 10px;
+    margin: 0 0 14px;
   }
 
   .breadcrumb.visible { display: flex; }
@@ -1767,11 +1790,31 @@
     padding: 28px 24px 64px;
   }
 
+  /* When the header (and its own safe-area padding) is hidden on an
+     inner page, main's own top padding needs to account for the
+     Dynamic Island / notch itself — otherwise the back button would
+     sit right behind it, the same problem the header had before. */
+  main:has(> .breadcrumb.visible) {
+    padding-top: calc(20px + env(safe-area-inset-top));
+  }
+
   /* ---------- Subject list view ---------- */
 
   #view-subjects.hidden,
   #view-chapters.hidden,
   #view-day.hidden {
+    display: none;
+  }
+
+  /* Header widget card and hub menu are only shown on the main
+     dashboard — hidden entirely on any inner page (a subject's
+     chapters, a revision dashboard, the daily view, the activity feed)
+     so that page gets the full screen instead of the dashboard's own
+     header sitting above it. header uses position: sticky, so simply
+     hiding it also correctly removes it from the sticky layout flow —
+     nothing is reserved for it while it's hidden. */
+  header.hidden-on-inner-page,
+  .main-hub-row.hidden-on-inner-page {
     display: none;
   }
 
@@ -2000,11 +2043,6 @@
     font-size: 20px;
     margin: 0;
     color: var(--text-primary, #14251d);
-    text-shadow:
-      0 1px 0 rgba(255,255,255,0.9),
-      0 2px 0 rgba(255,255,255,0.5),
-      0 3px 4px rgba(28,28,26,0.28),
-      0 1px 1px rgba(28,28,26,0.15);
   }
 
   .group-tag {
@@ -2012,14 +2050,14 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     opacity: 0.5;
-    border: 1px solid var(--text-primary, #14251d)33;
+    border: 1px solid rgba(20,37,29,0.2);
     border-radius: 3px;
     padding: 2px 6px;
   }
 
   .rule {
     flex: 1;
-    border-bottom: 1px dashed var(--text-primary, #14251d)33;
+    border-bottom: 1px dashed rgba(20,37,29,0.2);
   }
 
   .grid {
@@ -2569,9 +2607,33 @@
   /* ---------- Calendar section (main page, lower section) ---------- */
 
   .daily-section {
-    margin-top: 44px;
-    padding-top: 28px;
-    border-top: 2px solid var(--text-primary, #14251d);
+    margin-top: 32px;
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 18px;
+    padding: 22px 20px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -5px 8px rgba(20,30,35,0.06) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 4px 12px rgba(30,40,45,0.14);
+  }
+
+  .daily-section::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 35%;
+    border-radius: 18px 18px 60% 60% / 18px 18px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+  }
+
+  .daily-section > * {
+    position: relative;
+    z-index: 1;
   }
 
   .daily-header {
@@ -2587,12 +2649,7 @@
     font-family: 'Fraunces', serif;
     font-weight: 600;
     font-size: clamp(22px, 3vw, 28px);
-    color: var(--text-primary, #14251d);
-    text-shadow:
-      0 1px 0 rgba(255,255,255,0.9),
-      0 2px 0 rgba(255,255,255,0.5),
-      0 3px 5px rgba(28,28,26,0.3),
-      0 1px 1px rgba(28,28,26,0.15);
+    color: var(--tile-text, #1a2229);
   }
 
   .daily-sub {
@@ -2674,16 +2731,20 @@
   }
 
   .cal-grid {
-    border: 1.5px solid var(--text-primary, #14251d);
-    border-radius: 4px;
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 14px;
     overflow: hidden;
-    background: linear-gradient(160deg, #fbfaf6 0%, #f3f1ea 100%);
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 4px 10px rgba(30,40,45,0.12);
   }
 
   .cal-dow-row {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    background: var(--text-primary, #14251d);
+    background: linear-gradient(180deg, #2a2a28 0%, var(--text-primary, #14251d) 55%, #131311 100%);
   }
 
   .cal-dow {
@@ -2708,8 +2769,8 @@
 
   .cal-day {
     min-height: 68px;
-    border-right: 1px solid var(--text-primary, #14251d)1a;
-    border-bottom: 1px solid var(--text-primary, #14251d)1a;
+    border-right: 1px solid rgba(20,30,35,0.1);
+    border-bottom: 1px solid rgba(20,30,35,0.1);
     padding: 6px 6px 8px;
     display: flex;
     flex-direction: column;
@@ -2724,8 +2785,8 @@
   }
 
   .cal-day:hover, .cal-day:focus-visible {
-    background: var(--bg-surface, #ffffff);
-    box-shadow: inset 0 0 0 1px var(--text-primary, #14251d)22, inset 0 2px 6px rgba(0,0,0,0.06);
+    background: rgba(255,255,255,0.5);
+    box-shadow: inset 0 0 0 1px rgba(20,30,35,0.15), inset 0 2px 6px rgba(0,0,0,0.06);
     transform: scale(1.03);
     z-index: 1;
   }
@@ -2878,11 +2939,42 @@
     font-family: 'Fraunces', serif;
     font-weight: 600;
     font-size: clamp(24px, 3.4vw, 32px);
-    text-shadow:
-      0 1px 0 rgba(255,255,255,0.9),
-      0 2px 0 rgba(255,255,255,0.5),
-      0 4px 6px rgba(28,28,26,0.3),
-      0 1px 1px rgba(28,28,26,0.18);
+    color: var(--tile-text, #1a2229);
+  }
+
+  /* Wraps the title/stats/toolbar block at the top of every inner page
+     (chapter tracker, spaced revision, chapters due, backlog, activity
+     feed, daily view) in the same metallic widget-card material used by
+     the main dashboard's header — so every page reads as a cohesive
+     "device panel" rather than plain text sitting on the page background. */
+  .page-header-card {
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 18px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -5px 8px rgba(20,30,35,0.06) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 4px 12px rgba(30,40,45,0.14);
+  }
+
+  .page-header-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 45%;
+    border-radius: 18px 18px 60% 60% / 18px 18px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+  }
+
+  .page-header-card > * {
+    position: relative;
+    z-index: 1;
   }
 
   /* ---------- Activity feed ---------- */
@@ -3007,44 +3099,72 @@
   }
 
   .table-wrap {
-    border: 1.5px solid var(--text-primary, #14251d);
-    border-radius: 6px;
-    overflow: auto;
-    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--tile-border, #c7cbd1);
+    border-radius: 16px;
+    overflow: hidden;
+    background: linear-gradient(155deg, #fbfbfc 0%, #f0f1f3 22%, #e2e4e7 48%, #d3d6da 62%, #e6e8eb 78%, #f6f7f8 100%);
+    position: relative;
     box-shadow:
-      0 1px 0 rgba(255,255,255,0.7) inset,
-      0 2px 6px rgba(28,28,26,0.1);
+      0 1px 0 rgba(255,255,255,0.8) inset,
+      0 -5px 8px rgba(20,30,35,0.06) inset,
+      0 2px 0 var(--tile-edge, #b3b8bf),
+      0 4px 12px rgba(30,40,45,0.14);
+  }
+
+  /* The table itself scrolls inside a plain inner wrapper so overflow
+     still works — the metallic gradient, border, and shadow all live on
+     the outer .table-wrap instead, giving the whole table a single
+     coherent card appearance rather than a scrolling region with its
+     own separate background. */
+  .table-scroll-inner {
+    overflow: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Glossy highlight overlay across the top of the table card, matching
+     the same metallic treatment as the tiles, date-strip, and timer
+     widget, so tables read as the same material as the rest of the app. */
+  .table-wrap::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 30%;
+    border-radius: 16px 16px 60% 60% / 16px 16px 100% 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+    z-index: 0;
   }
 
   /* ---------- Custom scrollbars (Webkit + Firefox) ---------- */
 
-  .table-wrap,
+  .table-scroll-inner,
   .cal-weeks {
     scrollbar-width: thin;
     scrollbar-color: #9c9d9f var(--bg-subtle, #f4f5f7);
   }
 
-  .table-wrap::-webkit-scrollbar {
+  .table-scroll-inner::-webkit-scrollbar {
     height: 8px;
     width: 8px;
   }
 
-  .table-wrap::-webkit-scrollbar-track {
+  .table-scroll-inner::-webkit-scrollbar-track {
     background: var(--bg-subtle, #f4f5f7);
     border-radius: 4px;
   }
 
-  .table-wrap::-webkit-scrollbar-thumb {
+  .table-scroll-inner::-webkit-scrollbar-thumb {
     background: linear-gradient(180deg, #b8b9bb, #86878a);
     border-radius: 4px;
     border: 1px solid #6f7072;
   }
 
-  .table-wrap::-webkit-scrollbar-thumb:hover {
+  .table-scroll-inner::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg, #c5c6c8, #96979a);
   }
 
-  .table-wrap::-webkit-scrollbar-corner {
+  .table-scroll-inner::-webkit-scrollbar-corner {
     background: var(--bg-subtle, #f4f5f7);
   }
 
@@ -3068,16 +3188,24 @@
   }
 
   tbody tr {
-    border-top: 1px solid var(--text-primary, #14251d)22;
+    border-top: 1px solid rgba(20,30,35,0.1);
+    background: rgba(255,255,255,0.4);
+    transition: background 0.12s ease;
+  }
+
+  tbody tr:nth-child(even) {
+    background: rgba(20,30,35,0.03);
   }
 
   tbody tr:hover {
-    background: var(--bg-hover, #eef1f0);
+    background: rgba(31,122,77,0.08);
   }
 
   td {
     padding: 8px 10px;
     vertical-align: middle;
+    position: relative;
+    z-index: 1;
   }
 
   td input[type="text"],
@@ -3100,17 +3228,17 @@
   td input[type="number"] { width: 64px; }
 
   td input:hover {
-    border-color: var(--text-primary, #14251d)33;
-    background: rgba(28,28,26,0.04);
+    border-color: rgba(20,37,29,0.35);
+    background: rgba(20,37,29,0.05);
   }
 
   td input:focus {
     outline: none;
-    border-color: var(--text-primary, #14251d);
+    border-color: var(--accent-green, #1f7a4d);
     background: #fff;
     box-shadow:
-      0 1px 3px rgba(28,28,26,0.18) inset,
-      0 1px 0 rgba(255,255,255,0.6);
+      0 1px 3px rgba(20,30,35,0.18) inset,
+      0 0 0 2px var(--accent-green, #1f7a4d);
   }
 
   .chapter-name-cell input {
@@ -3122,7 +3250,7 @@
   select.subject-select {
     font: inherit;
     font-size: 12px;
-    border: 1px solid var(--text-primary, #14251d)33;
+    border: 1px solid rgba(20,37,29,0.35);
     border-radius: 4px;
     padding: 5px 6px;
     background: #fff;
@@ -3267,7 +3395,7 @@
     font-family: 'Fraunces', serif;
     font-weight: 600;
     font-size: 15px;
-    color: #232324;
+    color: var(--tile-text, #1a2229);
     margin: 2px 0 0;
   }
 
@@ -3638,13 +3766,14 @@
       </div>
     </div>
 
-    <div class="breadcrumb" id="breadcrumb">
-      <button class="back-btn" id="back-btn">&larr; back</button>
-    </div>
   </div>
 </header>
 
 <main>
+  <div class="breadcrumb" id="breadcrumb">
+    <button class="back-btn" id="back-btn">&larr; back</button>
+  </div>
+
   <div class="main-hub-row">
     <div class="hub-toggle-strip" id="hub-toggle-strip">
       <div class="hub-wrap" id="hub-wrap">
@@ -4568,6 +4697,15 @@
     document.getElementById("view-day").classList.toggle("hidden", view !== "day");
     document.getElementById("view-activity-feed").classList.toggle("hidden", view !== "activity-feed");
     document.getElementById("breadcrumb").classList.toggle("visible", view !== "subjects");
+
+    // The header widget card (title, date-strip, timer) and the hub
+    // toggle row are only shown on the main dashboard — any inner page
+    // (a subject's chapters, a revision dashboard, the daily view, the
+    // activity feed) hides them entirely, so that page gets the full
+    // screen instead of competing with the dashboard's own header above it.
+    const isMainDashboard = view === "subjects";
+    document.querySelector("header").classList.toggle("hidden-on-inner-page", !isMainDashboard);
+    document.querySelector(".main-hub-row").classList.toggle("hidden-on-inner-page", !isMainDashboard);
   }
 
   function goHome() {
@@ -5133,6 +5271,7 @@
     const doneCount = chapters.filter(c => c.revision === "done").length;
 
     container.innerHTML = `
+      <div class="page-header-card">
       <div class="subject-title-row">
         <div class="subject-title" style="color:${meta.tint}">${subject.name}</div>
       </div>
@@ -5147,7 +5286,9 @@
         <button class="add-btn" id="open-revision-btn" style="background:${meta.tint}">Spaced Revision Dashboard</button>
         <span class="save-note">changes save automatically</span>
       </div>
+      </div>
       <div class="table-wrap">
+        <div class="table-scroll-inner">
         <table>
           <thead>
             <tr>
@@ -5161,6 +5302,7 @@
           </thead>
           <tbody id="chapter-tbody"></tbody>
         </table>
+        </div>
       </div>
     `;
 
@@ -5368,6 +5510,7 @@
     const headerCells = REVISION_STAGES.map(s => `<th>${s.label} <span style="opacity:.6;font-weight:400;text-transform:none">(Day ${s.offset})</span></th>`).join("");
 
     container.innerHTML = `
+      <div class="page-header-card">
       <div class="subject-title-row">
         <div class="subject-title" style="color:${meta.tint}">${subject.name} — Spaced Revision</div>
       </div>
@@ -5381,7 +5524,9 @@
       <div class="toolbar">
         <span class="save-note">dates auto-calculate from each chapter's lecture completion date — edit any date to override manually</span>
       </div>
+      </div>
       <div class="table-wrap">
+        <div class="table-scroll-inner">
         <table>
           <thead>
             <tr>
@@ -5391,6 +5536,7 @@
           </thead>
           <tbody id="revision-tbody"></tbody>
         </table>
+        </div>
       </div>
     `;
 
@@ -5520,12 +5666,15 @@
   function renderRevisionDuePage() {
     const container = document.getElementById("view-revision-due");
     container.innerHTML = `
+      <div class="page-header-card">
       <div class="subject-title-row">
         <div class="subject-title">Chapters Due for Revision</div>
       </div>
       <p class="daily-sub">Pulled automatically from every subject's Spaced Revision Dashboard (R1–R5). Shows only chapters due today, not yet marked done.</p>
+      </div>
 
       <div class="table-wrap">
+        <div class="table-scroll-inner">
         <table>
           <thead>
             <tr>
@@ -5538,6 +5687,7 @@
           </thead>
           <tbody id="revision-due-tbody"></tbody>
         </table>
+        </div>
       </div>
     `;
 
@@ -5666,10 +5816,12 @@
   function renderActivityFeedPage() {
     const container = document.getElementById("view-activity-feed");
     container.innerHTML = `
+      <div class="page-header-card">
       <div class="subject-title-row">
         <div class="subject-title">Activity Feed</div>
       </div>
       <p class="daily-sub">Automatically generated from your own actions — nothing here needs to be filled in manually.</p>
+      </div>
 
       <div class="activity-feed-list" id="activity-feed-list"></div>
     `;
@@ -5744,12 +5896,15 @@
   function renderRevisionBacklogPage() {
     const container = document.getElementById("view-revision-backlog");
     container.innerHTML = `
+      <div class="page-header-card">
       <div class="subject-title-row">
         <div class="subject-title">Revision Backlog</div>
       </div>
       <p class="daily-sub">Chapters from Chapters Due for Revision that were not marked done on their day. Automatically grows each day something is missed — never shows today's or future work.</p>
+      </div>
 
       <div class="table-wrap">
+        <div class="table-scroll-inner">
         <table>
           <thead>
             <tr>
@@ -5763,6 +5918,7 @@
           </thead>
           <tbody id="revision-backlog-tbody"></tbody>
         </table>
+        </div>
       </div>
     `;
 
@@ -6002,6 +6158,7 @@
     const doneCount = entries.filter(e => e.mcqDone && e.lectureDone && e.revisionDone).length;
 
     container.innerHTML = `
+      <div class="page-header-card">
       <div class="subject-title-row">
         <div class="subject-title">${formatDateLong(dateStr)}</div>
       </div>
@@ -6015,7 +6172,9 @@
         <button class="add-btn" id="add-day-entry-btn">+ Add entry</button>
         <span class="save-note">changes save automatically</span>
       </div>
+      </div>
       <div class="table-wrap">
+        <div class="table-scroll-inner">
         <table>
           <thead>
             <tr>
@@ -6028,6 +6187,7 @@
           </thead>
           <tbody id="day-tbody"></tbody>
         </table>
+        </div>
       </div>
     `;
 
